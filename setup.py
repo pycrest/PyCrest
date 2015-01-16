@@ -10,6 +10,7 @@ setup(
     author_email='penitenttangentt@gmail.com',
     description='Easy interface to the CREST API',
     install_requires=['requests'],
+    test_suite='nose.collector',
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

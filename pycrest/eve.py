@@ -7,7 +7,7 @@ from pycrest.errors import APIException
 
 try:
     from urllib.parse import quote
-except ImportError:
+except ImportError:  # pragma: no cover
     from urllib import quote
 import logging
 
@@ -58,7 +58,7 @@ class EVE(APIConnection):
 
     def __call__(self):
         if not self._data:
-            self._data = APIObject(self.get(self._public_endpoint), self)
+            self._data = APIObject(self.get(self._endpoint), self)
 
     def __getattr__(self, item):
         return self._data.__getattr__(item)
@@ -150,8 +150,8 @@ class APIObject(object):
         else:
             return self
 
-    def __str__(self):
+    def __str__(self):  # pragma: no cover
         return self._dict.__str__()
 
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         return self._dict.__repr__()
