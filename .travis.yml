@@ -6,7 +6,7 @@ python:
   - "3.3"
   - "3.4"
   - "pypy"
-install: pip install mako coveralls testtools
+install: pip install mako coveralls testtools mock
 script: coverage run setup.py test
 after_success: coveralls
 notifications:
