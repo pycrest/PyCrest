@@ -93,7 +93,7 @@ on an authorized connection:
 
 .. highlight:: python
 
->>> con = eve.authorize("VLx3gfdVemSRLxxKGE8xcaJ17BSq-3KKJEYh3dgesWPQ6eix2JXVcot0YTvraVqK0")
+>>> con = eve.authorize(code)
 >>> con.whoami()
 {u'Scopes': u'publicData', u'CharacterName': u'Dreae', ...}
 
