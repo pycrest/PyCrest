@@ -59,6 +59,7 @@ class EVE(APIConnection):
     def __call__(self):
         if not self._data:
             self._data = APIObject(self.get(self._endpoint), self)
+        return self._data
 
     def __getattr__(self, item):
         return self._data.__getattr__(item)
@@ -138,14 +139,11 @@ class APIObject(object):
         return self._dict[item]
 
     def __call__(self, *args, **kwargs):
-        if not self._cache and 'href' in self._dict:
+        if ((not self._cache) or round(time.time()) - self._cache[0] > self.connection.cache_time) and 'href' in self._dict:
             logger.debug("%s not yet loaded", self._dict['href'])
             self._cache = (round(time.time()), APIObject(self.connection.get(self._dict['href']), self.connection))
             return self._cache[1]
         elif self._cache:
-            if round(time.time()) - self._cache[0] > self.connection.cache_time:
-                logger.debug("Cache has expired for resource %s", self._dict['href'])
-                self._cache = (round(time.time()), APIObject(self.connection.get(self._dict['href']), self.connection))
             return self._cache[1]
         else:
             return self
