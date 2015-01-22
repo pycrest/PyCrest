@@ -4,6 +4,7 @@ import time
 from pycrest import version
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
+from pycrest.hashdict import hashdict
 
 try:
     from urllib.parse import quote
@@ -27,7 +28,7 @@ class APIConnection(object):
         }
         headers.update(self._headers)
 
-        logger.debug('Getting resource %s', resource)
+        logger.debug('Getting resource %s (params=%s)', resource, params)
         res = requests.get(resource, headers=headers, params=params if params else {})
         if res.status_code != 200:
             raise APIException("Got unexpected status code from server: %i" % res.status_code)
@@ -111,11 +112,12 @@ class AuthedConnection(EVE):
         return AuthedConnection(res.json(), self._endpoint, self._oauth_endpoint, self.client_id, self.api_key)
 
 
+
 class APIObject(object):
     def __init__(self, parent, connection):
         self._dict = {}
         self.connection = connection
-        self._cache = None
+        self._cache = {}
         for k, v in parent.items():
             if type(v) is dict:
                 self._dict[k] = APIObject(v, connection)
@@ -138,13 +140,15 @@ class APIObject(object):
     def __getattr__(self, item):
         return self._dict[item]
 
-    def __call__(self, *args, **kwargs):
-        if ((not self._cache) or round(time.time()) - self._cache[0] > self.connection.cache_time) and 'href' in self._dict:
-            logger.debug("%s not yet loaded", self._dict['href'])
-            self._cache = (round(time.time()), APIObject(self.connection.get(self._dict['href']), self.connection))
-            return self._cache[1]
-        elif self._cache:
-            return self._cache[1]
+    def __call__(self, **kwargs):
+        hkwargs = hashdict(kwargs)
+        cached = hkwargs in self._cache
+        if ((not cached) or int(time.time()) - self._cache[hkwargs][0] > self.connection.cache_time) and 'href' in self._dict:
+            logger.debug("%s with params %s not yet loaded", self._dict['href'], kwargs)
+            self._cache[hkwargs] = (int(time.time()), APIObject(self.connection.get(self._dict['href'], params=kwargs), self.connection))
+            return self._cache[hkwargs][1]
+        elif cached:
+            return self._cache[hkwargs][1]
         else:
             return self
 
