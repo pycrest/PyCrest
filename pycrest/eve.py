@@ -75,14 +75,27 @@ class EVE(APIConnection):
             "&state=%s" % state if state else ''
         )
 
-    def authorize(self, code):
+    def _authorize(self, params):
         auth = text_(base64.b64encode(bytes_("%s:%s" % (self.client_id, self.api_key))))
         headers = {"Authorization": "Basic %s" % auth}
-        params = {"grant_type": "authorization_code", "code": code}
         res = requests.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
         if res.status_code != 200:
             raise APIException("Got unexpected status code from API: %i" % res.status_code)
-        return AuthedConnection(res.json(), self._authed_endpoint, self._oauth_endpoint, self.client_id, self.api_key)
+        return res.json()
+
+    def authorize(self, code):
+        res = self._authorize(params={"grant_type": "authorization_code", "code": code})
+        return AuthedConnection(res, self._authed_endpoint, self._oauth_endpoint, self.client_id, self.api_key)
+
+    def refr_authorize(self, refresh_token):
+        res = self._authorize(params={"grant_type": "refresh_token", "refresh_token": refresh_token})
+        return AuthedConnection({'access_token': res['access_token'],
+                                 'refresh_token': refresh_token,
+                                 'expires_in': res['expires_in']},
+                                self._authed_endpoint,
+                                self._oauth_endpoint,
+                                self.client_id,
+                                self.api_key)
 
 
 class AuthedConnection(EVE):
@@ -92,10 +105,17 @@ class AuthedConnection(EVE):
         self.api_key = api_key
         self.token = res['access_token']
         self.refresh_token = res['refresh_token']
-        self.expires = round(time.time()) + res['expires_in']
+        self.expires = int(time.time()) + res['expires_in']
         self._oauth_endpoint = oauth_endpoint
         self._endpoint = endpoint
         self._headers.update({"Authorization": "Bearer %s" % self.token})
+
+    def __call__(self):
+        if not self._data:
+            if int(time.time()) >= self.expires:
+                self.refresh()
+            self._data = APIObject(self.get(self._endpoint), self)
+        return self._data
 
     def whoami(self):
         if 'whoami' not in self._cache:
@@ -103,14 +123,11 @@ class AuthedConnection(EVE):
         return self._cache['whoami']
 
     def refresh(self):
-        auth = text_(base64.b64encode(bytes_("%s:%s" % (self.client_id, self.api_key))))
-        headers = {"Authorization": "Basic %s" % auth}
-        params = {"grant_type": "refresh_token", "refresh_token": self.refresh_token}
-        res = requests.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
-        if res.status_code != 200:
-            raise APIException("Got unexpected status code from API: %i" % res.status_code)
-        return AuthedConnection(res.json(), self._endpoint, self._oauth_endpoint, self.client_id, self.api_key)
-
+        res = self._authorize(params={"grant_type": "refresh_token", "refresh_token": self.refresh_token})
+        self.token = res['access_token']
+        self.expires = int(time.time()) + res['expires_in']
+        self._headers.update({"Authorization": "Bearer %s" % self.token})
+        return self  # for backwards compatibility
 
 
 class APIObject(object):
