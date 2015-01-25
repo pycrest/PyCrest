@@ -59,7 +59,7 @@ class APICache(object):
 
 
 class APIConnection(object):
-    def __init__(self, additional_headers=None, user_agent=None, cache_time=300, cache_dir=None):
+    def __init__(self, additional_headers=None, user_agent=None, cache_time=600, cache_dir=None):
         self._headers = {} if not additional_headers else additional_headers
         self._useragent = "PyCrest v %s" % version if not user_agent else user_agent
         self.cache_time = cache_time
@@ -137,6 +137,7 @@ class EVE(APIConnection):
 
     def __getattr__(self, item):
         return self._data.__getattr__(item)
+
     def auth_uri(self, scopes=None, state=None):
         s = [] if not scopes else scopes
         return "%s/authorize?response_type=code&redirect_uri=%s&client_id=%s%s%s" % (
@@ -164,6 +165,15 @@ class EVE(APIConnection):
         return AuthedConnection({'access_token': res['access_token'],
                                  'refresh_token': refresh_token,
                                  'expires_in': res['expires_in']},
+                                self._authed_endpoint,
+                                self._oauth_endpoint,
+                                self.client_id,
+                                self.api_key)
+
+    def temptoken_authorize(self, access_token, expires_in, refresh_token):
+        return AuthedConnection({'access_token': access_token,
+                                 'refresh_token': refresh_token,
+                                 'expires_in': expires_in},
                                 self._authed_endpoint,
                                 self._oauth_endpoint,
                                 self.client_id,
