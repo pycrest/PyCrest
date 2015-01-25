@@ -1,6 +1,7 @@
 import base64
 import requests
 import time
+import urlparse
 from pycrest import version
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
@@ -21,15 +22,23 @@ class APIConnection(object):
         self._useragent = "PyCrest v %s" % version if not user_agent else user_agent
         self.cache_time = cache_time
 
-    def get(self, resource, params=None):
+    def get(self, resource, params={}):
         headers = {
             "User-Agent": self._useragent,
             "Accept": "application/json"
         }
         headers.update(self._headers)
 
-        logger.debug('Getting resource %s (params=%s)', resource, params)
-        res = requests.get(resource, headers=headers, params=params if params else {})
+        # remove params from resource URI (needed for paginated stuff)
+        qs = urlparse.urlparse(resource).query
+        prms = {tup[0]: tup[1] for tup in urlparse.parse_qsl(qs)}
+
+        # params supplied to self.get() override parsed params
+        for key in params:
+            prms[key] = params[key]
+
+        logger.debug('Getting resource %s (params=%s)', resource, prms)
+        res = requests.get(resource, headers=headers, params=prms)
         if res.status_code != 200:
             raise APIException("Got unexpected status code from server: %i" % res.status_code)
         return res.json()
