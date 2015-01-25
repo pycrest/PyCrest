@@ -21,6 +21,7 @@ class APIConnection(object):
         self._headers = {} if not additional_headers else additional_headers
         self._useragent = "PyCrest v %s" % version if not user_agent else user_agent
         self.cache_time = cache_time
+        self.session = requests.Session()
 
     def get(self, resource, params={}):
         headers = {
@@ -38,7 +39,7 @@ class APIConnection(object):
             prms[key] = params[key]
 
         logger.debug('Getting resource %s (params=%s)', resource, prms)
-        res = requests.get(resource, headers=headers, params=prms)
+        res = self.session.get(resource, headers=headers, params=prms)
         if res.status_code != 200:
             raise APIException("Got unexpected status code from server: %i" % res.status_code)
         return res.json()
@@ -87,7 +88,7 @@ class EVE(APIConnection):
     def _authorize(self, params):
         auth = text_(base64.b64encode(bytes_("%s:%s" % (self.client_id, self.api_key))))
         headers = {"Authorization": "Basic %s" % auth}
-        res = requests.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
+        res = self.session.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
         if res.status_code != 200:
             raise APIException("Got unexpected status code from API: %i" % res.status_code)
         return res.json()
