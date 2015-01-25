@@ -89,9 +89,13 @@ class APIConnection(object):
             key = (resource, frozenset(headers.items()), frozenset(prms.items()))
             cached = self.cache.get(key)
             if cached and time.time() - cached['timestamp'] < self.cache_time:
+                logger.debug('Cache hit for resource %s (params=%s)', resource, prms)
                 return cached['payload']
             elif cached:
+                logger.debug('Cache stale for resource %s (params=%s)', resource, prms)
                 self.cache.invalidate(key)
+            else:
+                logger.debug('Cache miss for resource %s (params=%s', resource, prms)
 
         logger.debug('Getting resource %s (params=%s)', resource, prms)
         res = self.session.get(resource, headers=headers, params=prms)
