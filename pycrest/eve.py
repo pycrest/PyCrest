@@ -40,7 +40,7 @@ class APICache(object):
         try:
             with open(self._getpath(key), 'r') as f:
                 return cPickle.loads(zlib.decompress(f.read()))
-        except IOError, ex:
+        except IOError as ex:
             if ex.errno == 2:  # file does not exist (yet)
                 return None
             else:
@@ -51,7 +51,7 @@ class APICache(object):
 
         try:
             os.unlink(self._getpath(key))
-        except OSError, ex:
+        except OSError as ex:
             if ex.errno == 2:  # does not exist
                 pass
             else:
