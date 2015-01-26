@@ -76,10 +76,18 @@ class MockFilesystem(object):
             raise OSError(2, "No such file or directory: '%s'" % path)
         self.fs[directory].pop(filename)
 
+    def listdir(self, directory):
+        return self.fs[directory].keys()
+
 
 class TestApi(unittest.TestCase):
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.mkdir')
+    @mock.patch('os.unlink')
+    @mock.patch('os.listdir')
+    @mock.patch('__builtin__.open')
     @mock.patch('requests.Session.get')
-    def test_public_api(self, mock_get):
+    def test_public_api(self, mock_get, mock_open, mock_listdir, mock_unlink, mock_mkdir, mock_isdir):
         mock_resp = mock.MagicMock(requests.Response)
 
         def _get(href, **kwargs):
@@ -166,7 +174,14 @@ class TestApi(unittest.TestCase):
                 res.json.return_value = {}
                 return res
 
+        fs = MockFilesystem()
+        mock_isdir.side_effect = fs.isdir
+        mock_mkdir.side_effect = fs.mkdir
+        mock_unlink.side_effect = fs.unlink
+        mock_listdir.side_effect = fs.listdir
+        mock_open.side_effect = fs.open
         mock_get.side_effect = _get
+
         eve = pycrest.EVE()
         self.assertRaises(AttributeError, eve.__getattr__, 'marketData')
         eve()
@@ -184,36 +199,30 @@ class TestApi(unittest.TestCase):
         testing = pycrest.EVE(testing=True)
         self.assertEqual(testing._public_endpoint, "http://public-crest-sisi.testeveonline.com/")
 
-        fs = MockFilesystem()
-        with mock.patch("os.path.isdir", side_effect=fs.isdir):
-            with mock.patch("os.mkdir", side_effect=fs.mkdir):
-                with mock.patch("os.unlink", side_effect=fs.unlink):
-                    with mock.patch("__builtin__.open", fs.open, create=True):
-                        # cache miss
-                        eve = pycrest.EVE(cache_dir='/cachedir')
-                        eve()
+        # cache miss
+        eve = pycrest.EVE(cache_dir='/cachedir')
+        eve()
 
-                        # cache hit
-                        eve = pycrest.EVE(cache_dir='/cachedir')
-                        eve()
+        # cache hit
+        eve = pycrest.EVE(cache_dir='/cachedir')
+        eve()
 
-                        # stale cache hit
-                        for dirpath in fs.fs.keys():
-                            if dirpath == '/cachedir':
-                                self.assertEquals(len(fs.fs[dirpath].keys()), 1)
-                                path = os.path.join(dirpath, fs.fs[dirpath].keys()[0])
+        # stale cache hit
+        ls = os.listdir('/cachedir')
+        self.assertEquals(len(ls), 1)
+        path = os.path.join('/cachedir', ls[0])
 
-                        recf = fs.open(path, 'r')
-                        rec = cPickle.loads(zlib.decompress(recf.read()))
-                        recf.close()
-                        rec['timestamp'] -= eve.cache_time
+        recf = open(path, 'r')
+        rec = cPickle.loads(zlib.decompress(recf.read()))
+        recf.close()
+        rec['timestamp'] -= eve.cache_time
 
-                        recf = fs.open(path, 'w')
-                        recf.write(zlib.compress(cPickle.dumps(rec)))
-                        recf.close()
+        recf = open(path, 'w')
+        recf.write(zlib.compress(cPickle.dumps(rec)))
+        recf.close()
 
-                        eve = pycrest.EVE(cache_dir='/cachedir')
-                        eve()
+        eve = pycrest.EVE(cache_dir='/cachedir')
+        eve()
 
 
 class TestAuthorization(unittest.TestCase):
@@ -381,42 +390,45 @@ class TestAuthorization(unittest.TestCase):
 
 
 class TestApiCache(unittest.TestCase):
-    def test_apicache(self):
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.mkdir')
+    @mock.patch('os.unlink')
+    @mock.patch('__builtin__.open')
+    def test_apicache(self, mock_open, mock_unlink, mock_mkdir, mock_isdir):
         fs = MockFilesystem()
-        with mock.patch("os.path.isdir", side_effect=fs.isdir):
-            with mock.patch("os.mkdir", side_effect=fs.mkdir):
-                with mock.patch("os.unlink", side_effect=fs.unlink):
-                    with mock.patch("__builtin__.open", fs.open, create=True):
-                        # with mkdir needed
-                        crest = pycrest.EVE(cache_dir="/cachedir")
+        mock_isdir.side_effect = fs.isdir
+        mock_mkdir.side_effect = fs.mkdir
+        mock_unlink.side_effect = fs.unlink
+        mock_open.side_effect = fs.open
 
-                        # without mkdir now
-                        crest = pycrest.EVE(cache_dir="/cachedir")
+        # with mkdir needed
+        crest = pycrest.EVE(cache_dir="/cachedir")
 
-                        # cache created?
-                        self.assertEqual(type(crest.cache).__name__, "APICache")
+        # without mkdir now
+        crest = pycrest.EVE(cache_dir="/cachedir")
 
-                        # invalidate non-existing key
-                        crest.cache.invalidate('nxkey')
+        # cache created?
+        self.assertEqual(type(crest.cache).__name__, "APICache")
 
-                        # get non-existing key
-                        self.assertEqual(crest.cache.get('nxkey'), None)
+        # invalidate non-existing key
+        crest.cache.invalidate('nxkey')
 
-                        # cache (key, value) pair and retrieve it
-                        crest.cache.put('key', 'value')
-                        self.assertEqual(crest.cache.get('key'), 'value')
+        # get non-existing key
+        self.assertEqual(crest.cache.get('nxkey'), None)
 
-                        # retrieve from disk
-                        crest = pycrest.EVE(cache_dir="/cachedir")
-                        self.assertEqual(crest.cache.get('key'), 'value')
+        # cache (key, value) pair and retrieve it
+        crest.cache.put('key', 'value')
+        self.assertEqual(crest.cache.get('key'), 'value')
 
-                        # invalidate key and check it's removed
-                        crest.cache.invalidate('key')
-                        self.assertEqual(crest.cache.get('key'), None)
+        # retrieve from disk
+        crest = pycrest.EVE(cache_dir="/cachedir")
+        self.assertEqual(crest.cache.get('key'), 'value')
 
-                        # dirname == filename tests
-                        fs.mkdir('/cachedir/'+str(hash('key'))+'.cache')
-                        with self.assertRaises(OSError):
-                            crest.cache.invalidate('key')
-                        with self.assertRaises(IOError):
-                            crest.cache.get('key')
+        # invalidate key and check it's removed
+        crest.cache.invalidate('key')
+        self.assertEqual(crest.cache.get('key'), None)
+
+        # dirname == filename tests
+        fs.mkdir('/cachedir/'+str(hash('key'))+'.cache')
+        self.assertRaises(OSError, lambda: crest.cache.invalidate('key'))
+        self.assertRaises(IOError, lambda: crest.cache.get('key'))
