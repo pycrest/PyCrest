@@ -137,7 +137,7 @@ class TestApi(unittest.TestCase):
         @httmock.all_requests
         def default_useragent(url, request):
             self.assertEqual(request.headers["User-Agent"],
-                    "PyCrest/{}".format(pycrest.version))
+                    "PyCrest/{0}".format(pycrest.version))
 
         @httmock.all_requests
         def custom_useragent(url, request):

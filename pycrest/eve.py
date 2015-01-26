@@ -23,7 +23,7 @@ class APIConnection(object):
         if additional_headers is None:
             additional_headers = {}
         if user_agent is None:
-            user_agent = "PyCrest/{}".format(version)
+            user_agent = "PyCrest/{0}".format(version)
         session.headers.update({
             "User-Agent": user_agent,
             "Accept": "application/json",
