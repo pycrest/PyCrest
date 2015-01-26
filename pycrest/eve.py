@@ -2,15 +2,19 @@ import os
 import base64
 import requests
 import time
-import urlparse
 import zlib
 from pycrest import version
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
 
 try:
+    from urllib.parse import urlparse, urlunparse, parse_qsl
+except ImportError:  # pragma: no cover
+    from urlparse import urlparse, urlunparse, parse_qsl
+
+try:
     import pickle
-except ImportError:
+except ImportError:  # pragma: no cover
     import cPickle as pickle
 
 try:
@@ -81,11 +85,11 @@ class APIConnection(object):
         headers.update(self._headers)
 
         # remove params from resource URI (needed for paginated stuff)
-        parsed_uri = urlparse.urlparse(resource)
+        parsed_uri = urlparse(resource)
         qs = parsed_uri.query
-        resource = urlparse.urlunparse(parsed_uri._replace(query=''))
+        resource = urlunparse(parsed_uri._replace(query=''))
         prms = {}
-        for tup in urlparse.parse_qsl(qs):
+        for tup in parse_qsl(qs):
             prms[tup[0]] = tup[1]
 
         # params supplied to self.get() override parsed params
