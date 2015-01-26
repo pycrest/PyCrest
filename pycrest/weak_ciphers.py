@@ -15,7 +15,8 @@ from requests.packages.urllib3.packages.ssl_match_hostname import \
         match_hostname
 
 
-class WeakCiphersHTTPSConnection(urllib3.connection.VerifiedHTTPSConnection):
+class WeakCiphersHTTPSConnection(
+        urllib3.connection.VerifiedHTTPSConnection): # pragma: no cover
 
     # Python versions >=2.7.9 and >=3.4.1 do not (by default) allow ciphers
     # with MD5. Unfortunately, the CREST public server _only_ supports
