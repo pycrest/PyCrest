@@ -26,7 +26,7 @@ class APICache(object):
             os.mkdir(self.path, mode=0700)
 
     def _getpath(self, key):
-        return os.path.join(self.path, str(hash(key)), '.cache')
+        return os.path.join(self.path, str(hash(key)) + '.cache')
 
     def put(self, key, value):
         with open(self._getpath(key), 'w') as f:
@@ -44,7 +44,7 @@ class APICache(object):
             if ex.errno == 2:  # file does not exist (yet)
                 return None
             else:
-                raise ex
+                raise
 
     def invalidate(self, key):
         self._cache.pop(key, None)
@@ -55,7 +55,7 @@ class APICache(object):
             if ex.errno == 2:  # does not exist
                 pass
             else:
-                raise ex
+                raise
 
 
 class APIConnection(object):
@@ -77,7 +77,9 @@ class APIConnection(object):
         headers.update(self._headers)
 
         # remove params from resource URI (needed for paginated stuff)
-        qs = urlparse.urlparse(resource).query
+        parsed_uri = urlparse.urlparse(resource)
+        qs = parsed_uri.query
+        resource = urlparse.urlunparse(parsed_uri._replace(query=''))
         prms = {tup[0]: tup[1] for tup in urlparse.parse_qsl(qs)}
 
         # params supplied to self.get() override parsed params
@@ -132,7 +134,8 @@ class EVE(APIConnection):
         self._data = None
 
         APIConnection.__init__(self, user_agent=kwargs.get('user_agent', 'PyCrest - v %s' % version),
-                               cache_time=kwargs.get('cache_time', 600))
+                               cache_time=kwargs.get('cache_time', 600),
+                               cache_dir=kwargs.get('cache_dir', None))
 
     def __call__(self):
         if not self._data:
