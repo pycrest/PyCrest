@@ -4,10 +4,14 @@ import requests
 import time
 import urlparse
 import zlib
-import cPickle
 from pycrest import version
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
+
+try:
+    import pickle
+except ImportError:
+    import cPickle as pickle
 
 try:
     from urllib.parse import quote
@@ -30,7 +34,7 @@ class APICache(object):
 
     def put(self, key, value):
         with open(self._getpath(key), 'w') as f:
-            f.write(zlib.compress(cPickle.dumps(value, -1)))
+            f.write(zlib.compress(pickle.dumps(value, -1)))
         self._cache[key] = value
 
     def get(self, key):
@@ -39,7 +43,7 @@ class APICache(object):
 
         try:
             with open(self._getpath(key), 'r') as f:
-                return cPickle.loads(zlib.decompress(f.read()))
+                return pickle.loads(zlib.decompress(f.read()))
         except IOError as ex:
             if ex.errno == 2:  # file does not exist (yet)
                 return None

@@ -2,10 +2,14 @@ import os
 import base64
 import requests
 import time
-import cPickle
 import zlib
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
+
+try:
+    import pickle
+except ImportError:
+    import cPickle as pickle
 
 try:
     from urllib.parse import quote
@@ -213,12 +217,12 @@ class TestApi(unittest.TestCase):
         path = os.path.join('/cachedir', ls[0])
 
         recf = open(path, 'r')
-        rec = cPickle.loads(zlib.decompress(recf.read()))
+        rec = pickle.loads(zlib.decompress(recf.read()))
         recf.close()
         rec['timestamp'] -= eve.cache_time
 
         recf = open(path, 'w')
-        recf.write(zlib.compress(cPickle.dumps(rec)))
+        recf.write(zlib.compress(pickle.dumps(rec)))
         recf.close()
 
         eve = pycrest.EVE(cache_dir='/cachedir')
