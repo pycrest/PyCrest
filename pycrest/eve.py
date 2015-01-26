@@ -80,7 +80,9 @@ class APIConnection(object):
         parsed_uri = urlparse.urlparse(resource)
         qs = parsed_uri.query
         resource = urlparse.urlunparse(parsed_uri._replace(query=''))
-        prms = {tup[0]: tup[1] for tup in urlparse.parse_qsl(qs)}
+        prms = {}
+        for tup in urlparse.parse_qsl(qs):
+            prms[tup[0]] = tup[1]
 
         # params supplied to self.get() override parsed params
         for key in params:
