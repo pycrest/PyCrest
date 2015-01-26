@@ -4,6 +4,7 @@ import time
 from pycrest import version
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
+from pycrest.weak_ciphers import WeakCiphersAdapter
 
 try:
     from urllib.parse import quote
@@ -28,6 +29,8 @@ class APIConnection(object):
             "Accept": "application/json",
         })
         session.headers.update(additional_headers)
+        session.mount('https://public-crest.eveonline.com',
+                WeakCiphersAdapter())
         self._session = session
 
     def get(self, resource, params=None):
