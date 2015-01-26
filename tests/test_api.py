@@ -115,6 +115,59 @@ class TestApi(unittest.TestCase):
             testing = pycrest.EVE(testing=True)
             self.assertEqual(testing._public_endpoint, "http://public-crest-sisi.testeveonline.com/")
 
+    def test_headers(self):
+        _self = self
+        @httmock.all_requests
+        def custom_header(url, request):
+            _self.assertIn("X-PyCrest-Testing", request.headers)
+            _self.assertEqual(request.headers["X-PyCrest-Testing"], "True")
+
+        @httmock.all_requests
+        def no_custom_header(url, request):
+            self.assertNotIn("X-PyCrest-Testing", request.headers)
+
+        with httmock.HTTMock(no_custom_header):
+            eve = pycrest.EVE()
+            eve()
+        with httmock.HTTMock(custom_header):
+            eve = pycrest.EVE(additional_headers={"X-PyCrest-Testing": "True"})
+            eve()
+
+    def test_user_agent(self):
+        @httmock.all_requests
+        def default_useragent(url, request):
+            self.assertEqual(request.headers["User-Agent"],
+                    "PyCrest/{}".format(pycrest.version))
+
+        @httmock.all_requests
+        def custom_useragent(url, request):
+            self.assertEqual(request.headers["User-Agent"], "Testing 123")
+
+        with httmock.HTTMock(default_useragent):
+            eve = pycrest.EVE()
+            eve()
+        with httmock.HTTMock(custom_useragent):
+            eve = pycrest.EVE(user_agent="Testing 123")
+            eve()
+
+    def test_params(self):
+        @httmock.all_requests
+        def no_params(url, request):
+            self.assertEqual(url.query, "")
+            return {"status_code": 200, "content": {}}
+
+        @httmock.all_requests
+        def with_custom_params(url, request):
+            self.assertNotEqual(url.query, "")
+            return {"status_code": 200, "content": {}}
+
+        with httmock.HTTMock(no_params):
+            eve = pycrest.EVE()
+            eve.get("http://example.com")
+        with httmock.HTTMock(with_custom_params):
+            eve = pycrest.EVE()
+            eve.get("http://example.com", params={"Foo": "Bar"})
+
 
 class TestAuthorization(unittest.TestCase):
     def test_authorize(self):

@@ -45,10 +45,10 @@ class APIConnection(object):
 
 class EVE(APIConnection):
     def __init__(self, **kwargs):
-        self.api_key = kwargs.get('api_key', None)
-        self.client_id = kwargs.get('client_id', None)
-        self.redirect_uri = kwargs.get('redirect_uri', None)
-        if kwargs.get('testing', None):
+        self.api_key = kwargs.pop('api_key', None)
+        self.client_id = kwargs.pop('client_id', None)
+        self.redirect_uri = kwargs.pop('redirect_uri', None)
+        if kwargs.pop('testing', False):
             self._public_endpoint = "http://public-crest-sisi.testeveonline.com/"
             self._authed_endpoint = "https://api-sisi.testeveonline.com/"
             self._image_server = "https://image.testeveonline.com/"
@@ -62,8 +62,8 @@ class EVE(APIConnection):
         self._cache = {}
         self._data = None
 
-        APIConnection.__init__(self, user_agent=kwargs.get('user_agent', 'PyCrest - v %s' % version),
-                               cache_time=kwargs.get('cache_time', 600))
+        APIConnection.__init__(self, cache_time=kwargs.pop('cache_time', 600),
+                **kwargs)
 
     def __call__(self):
         if not self._data:
