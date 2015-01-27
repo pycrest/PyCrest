@@ -1,6 +1,7 @@
 import base64
 import requests
 import time
+import os
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
 
@@ -13,8 +14,76 @@ try:
     import testtools as unittest
 except ImportError:
     import unittest
+try:
+    import __builtin__
+    builtins_name = __builtin__.__name__
+except ImportError:
+    import builtins
+    builtins_name = builtins.__name__
 import httmock
 import pycrest
+import mock
+
+
+class MockFilesystem(object):
+    def __init__(self):
+        self.fs = {'/': {}}
+
+    def isdir(self, path):
+        return path in self.fs
+
+    def mkdir(self, path, mode=0o700):
+        if not path:
+            raise OSError(2, "No such file or directory: '%s'" % path)
+
+        if path not in self.fs:
+            self.fs[path] = {}
+
+    def open(self, path, mode='r'):
+        class FileObj(object):
+            def __init__(self, elem):
+                self.elem = elem
+                self.closed = 0
+            def __enter__(self):
+                return self
+            def __exit__(self, type, value, tb):
+                self.closed = 1
+            def write(self, data):
+                self.elem['data'] = data
+            def read(self):
+                return self.elem['data']
+            def close(self):
+                self.closed = 1
+
+        if path in self.fs:
+            raise IOError(21, "Is a directory: '%s'" % path)
+
+        directory, filename = os.path.split(path)
+
+        if not self.isdir(directory):
+            raise IOError(2, "No such file or directory: '%s'" % path)
+
+        if mode in ['r', 'rb', 'r+', 'r+b'] \
+                and filename not in self.fs[directory]:
+            raise IOError(2, "No such file or directory: '%s'" % path)
+
+        if mode in ['w', 'wb']:
+            self.fs[directory][filename] = {'data': ''}
+
+        return FileObj(self.fs[directory][filename])
+
+    def unlink(self, path):
+        if path in self.fs:
+            raise OSError(5, 'Is a directory')
+
+        directory, filename = os.path.split(path)
+        if directory not in self.fs \
+                or filename not in self.fs[directory]:
+            raise OSError(2, "No such file or directory: '%s'" % path)
+        self.fs[directory].pop(filename)
+
+    def listdir(self, directory):
+        return self.fs[directory].keys()
 
 
 @httmock.urlmatch(scheme="https",
@@ -99,7 +168,18 @@ all_mocks = [root_mock, market_mock, verify_mock, fallback_mock]
 
 
 class TestApi(unittest.TestCase):
-    def test_public_api(self):
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.mkdir')
+    @mock.patch('os.unlink')
+    @mock.patch('os.listdir')
+    @mock.patch('%s.open' % builtins_name)
+    def test_public_api(self, mock_open, mock_listdir, mock_unlink, mock_mkdir, mock_isdir):
+        fs = MockFilesystem()
+        mock_isdir.side_effect = fs.isdir
+        mock_mkdir.side_effect = fs.mkdir
+        mock_unlink.side_effect = fs.unlink
+        mock_listdir.side_effect = fs.listdir
+        mock_open.side_effect = fs.open
         with httmock.HTTMock(*all_mocks):
             eve = pycrest.EVE()
             self.assertRaises(AttributeError, eve.__getattr__, 'marketData')
@@ -170,12 +250,24 @@ class TestApi(unittest.TestCase):
 
 
 class TestAuthorization(unittest.TestCase):
-    def test_authorize(self):
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.mkdir')
+    @mock.patch('os.unlink')
+    @mock.patch('os.listdir')
+    @mock.patch('%s.open' % builtins_name)
+    def test_authorize(self, mock_open, mock_listdir, mock_unlink, mock_mkdir, mock_isdir):
         client_id = "bar"
         api_key = "foo"
         code = "foobar"
         access_token = "123asd"
         refresh_token = "asd123"
+
+        fs = MockFilesystem()
+        mock_isdir.side_effect = fs.isdir
+        mock_mkdir.side_effect = fs.mkdir
+        mock_unlink.side_effect = fs.unlink
+        mock_listdir.side_effect = fs.listdir
+        mock_open.side_effect = fs.open
 
         @httmock.urlmatch(scheme="https",
                 netloc=r"^login.eveonline.com$",
@@ -237,3 +329,49 @@ class TestAuthorization(unittest.TestCase):
             con = eve.authorize(code)
             self.assertEqual(con().marketData().totalCount, 2)
             self.assertEqual(con().marketData().totalCount, 2)
+
+
+class TestApiCache(unittest.TestCase):
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.mkdir')
+    @mock.patch('os.unlink')
+    @mock.patch('%s.open' % builtins_name)
+    def test_apicache(self, mock_open, mock_unlink, mock_mkdir, mock_isdir):
+        fs = MockFilesystem()
+        mock_isdir.side_effect = fs.isdir
+        mock_mkdir.side_effect = fs.mkdir
+        mock_unlink.side_effect = fs.unlink
+        mock_open.side_effect = fs.open
+
+        # with mkdir needed
+        crest = pycrest.EVE(cache_dir="/cachedir")
+
+        # without mkdir now
+        crest = pycrest.EVE(cache_dir="/cachedir")
+
+        # cache created?
+        self.assertEqual(type(crest.cache).__name__, "APICache")
+
+        # invalidate non-existing key
+        crest.cache.invalidate('nxkey')
+
+        # get non-existing key
+        self.assertEqual(crest.cache.get('nxkey'), None)
+
+        # cache (key, value) pair and retrieve it
+        crest.cache.put('key', 'value')
+        self.assertEqual(crest.cache.get('key'), 'value')
+
+        # retrieve from disk
+        crest = pycrest.EVE(cache_dir="/cachedir")
+        self.assertEqual(crest.cache.get('key'), 'value')
+
+        # invalidate key and check it's removed
+        crest.cache.invalidate('key')
+        self.assertEqual(crest.cache.get('key'), None)
+
+        # dirname == filename tests
+        # Use _getpath for platform independence
+        fs.mkdir(crest.cache._getpath('key'))
+        self.assertRaises(OSError, lambda: crest.cache.invalidate('key'))
+        self.assertRaises(IOError, lambda: crest.cache.get('key'))
