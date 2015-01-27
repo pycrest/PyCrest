@@ -7,13 +7,20 @@ from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
 
 try:
+    import __builtin__
+    builtins_name = __builtin__.__name__
+except ImportError:
+    import builtins
+    builtins_name = builtins.__name__
+
+try:
     import pickle
 except ImportError:
     import cPickle as pickle
 
 try:
     from urllib.parse import quote
-except ImportError:  # pragma: no cover
+except ImportError:
     from urllib import quote
 try:
     import testtools as unittest
@@ -89,7 +96,7 @@ class TestApi(unittest.TestCase):
     @mock.patch('os.mkdir')
     @mock.patch('os.unlink')
     @mock.patch('os.listdir')
-    @mock.patch('__builtin__.open')
+    @mock.patch('%s.open' % builtins_name)
     @mock.patch('requests.Session.get')
     def test_public_api(self, mock_get, mock_open, mock_listdir, mock_unlink, mock_mkdir, mock_isdir):
         mock_resp = mock.MagicMock(requests.Response)
@@ -212,7 +219,7 @@ class TestApi(unittest.TestCase):
         eve()
 
         # stale cache hit
-        ls = os.listdir('/cachedir')
+        ls = list(os.listdir('/cachedir'))
         self.assertEquals(len(ls), 1)
         path = os.path.join('/cachedir', ls[0])
 
@@ -397,7 +404,7 @@ class TestApiCache(unittest.TestCase):
     @mock.patch('os.path.isdir')
     @mock.patch('os.mkdir')
     @mock.patch('os.unlink')
-    @mock.patch('__builtin__.open')
+    @mock.patch('%s.open' % builtins_name)
     def test_apicache(self, mock_open, mock_unlink, mock_mkdir, mock_isdir):
         fs = MockFilesystem()
         mock_isdir.side_effect = fs.isdir
