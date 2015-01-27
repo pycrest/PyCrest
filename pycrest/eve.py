@@ -31,7 +31,7 @@ class APICache(object):
         self._cache = {}
         self.path = path
         if not os.path.isdir(self.path):
-            os.mkdir(self.path, mode=511)  # 0700 (Python 2 & 3 compatibility)
+            os.mkdir(self.path, 0o700)
 
     def _getpath(self, key):
         return os.path.join(self.path, str(hash(key)) + '.cache')

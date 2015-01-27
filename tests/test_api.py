@@ -37,7 +37,7 @@ class MockFilesystem(object):
     def isdir(self, path):
         return path in self.fs
 
-    def mkdir(self, path, mode=511):
+    def mkdir(self, path, mode=0o700):
         if not path:
             raise OSError(2, "No such file or directory: '%s'" % path)
 
