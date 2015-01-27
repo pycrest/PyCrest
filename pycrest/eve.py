@@ -4,6 +4,7 @@ import time
 from pycrest import version
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
+from pycrest.weak_ciphers import WeakCiphersAdapter
 
 try:
     from urllib.parse import quote
@@ -16,19 +17,27 @@ logger = logging.getLogger("pycrest.eve")
 
 class APIConnection(object):
     def __init__(self, additional_headers=None, user_agent=None, cache_time=600):
-        self._headers = {} if not additional_headers else additional_headers
-        self._useragent = "PyCrest v %s" % version if not user_agent else user_agent
         self.cache_time = cache_time
+        # Set up a Requests Session
+        session = requests.Session()
+        if additional_headers is None:
+            additional_headers = {}
+        if user_agent is None:
+            user_agent = "PyCrest/{0}".format(version)
+        session.headers.update({
+            "User-Agent": user_agent,
+            "Accept": "application/json",
+        })
+        session.headers.update(additional_headers)
+        session.mount('https://public-crest.eveonline.com',
+                WeakCiphersAdapter())
+        self._session = session
 
     def get(self, resource, params=None):
-        headers = {
-            "User-Agent": self._useragent,
-            "Accept": "application/json"
-        }
-        headers.update(self._headers)
-
         logger.debug('Getting resource %s', resource)
-        res = requests.get(resource, headers=headers, params=params if params else {})
+        if params is None:
+            params = {}
+        res = self._session.get(resource, params=params)
         if res.status_code != 200:
             raise APIException("Got unexpected status code from server: %i" % res.status_code)
         return res.json()
@@ -36,10 +45,10 @@ class APIConnection(object):
 
 class EVE(APIConnection):
     def __init__(self, **kwargs):
-        self.api_key = kwargs.get('api_key', None)
-        self.client_id = kwargs.get('client_id', None)
-        self.redirect_uri = kwargs.get('redirect_uri', None)
-        if kwargs.get('testing', None):
+        self.api_key = kwargs.pop('api_key', None)
+        self.client_id = kwargs.pop('client_id', None)
+        self.redirect_uri = kwargs.pop('redirect_uri', None)
+        if kwargs.pop('testing', False):
             self._public_endpoint = "http://public-crest-sisi.testeveonline.com/"
             self._authed_endpoint = "https://api-sisi.testeveonline.com/"
             self._image_server = "https://image.testeveonline.com/"
@@ -53,8 +62,8 @@ class EVE(APIConnection):
         self._cache = {}
         self._data = None
 
-        APIConnection.__init__(self, user_agent=kwargs.get('user_agent', 'PyCrest - v %s' % version),
-                               cache_time=kwargs.get('cache_time', 600))
+        APIConnection.__init__(self, cache_time=kwargs.pop('cache_time', 600),
+                **kwargs)
 
     def __call__(self):
         if not self._data:
@@ -78,7 +87,7 @@ class EVE(APIConnection):
         auth = text_(base64.b64encode(bytes_("%s:%s" % (self.client_id, self.api_key))))
         headers = {"Authorization": "Basic %s" % auth}
         params = {"grant_type": "authorization_code", "code": code}
-        res = requests.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
+        res = self._session.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
         if res.status_code != 200:
             raise APIException("Got unexpected status code from API: %i" % res.status_code)
         return AuthedConnection(res.json(), self._authed_endpoint, self._oauth_endpoint, self.client_id, self.api_key)
@@ -94,7 +103,8 @@ class AuthedConnection(EVE):
         self.expires = round(time.time()) + res['expires_in']
         self._oauth_endpoint = oauth_endpoint
         self._endpoint = endpoint
-        self._headers.update({"Authorization": "Bearer %s" % self.token})
+        self._session.headers.update(
+                {"Authorization": "Bearer %s" % self.token})
 
     def whoami(self):
         if 'whoami' not in self._cache:
@@ -105,7 +115,7 @@ class AuthedConnection(EVE):
         auth = text_(base64.b64encode(bytes_("%s:%s" % (self.client_id, self.api_key))))
         headers = {"Authorization": "Basic %s" % auth}
         params = {"grant_type": "refresh_token", "refresh_token": self.refresh_token}
-        res = requests.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
+        res = self._session.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
         if res.status_code != 200:
             raise APIException("Got unexpected status code from API: %i" % res.status_code)
         return AuthedConnection(res.json(), self._endpoint, self._oauth_endpoint, self.client_id, self.api_key)
