@@ -237,7 +237,14 @@ class TestApi(unittest.TestCase):
 
 
 class TestAuthorization(unittest.TestCase):
-    def test_authorize(self):
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.mkdir')
+    @mock.patch('os.unlink')
+    @mock.patch('os.listdir')
+    @mock.patch('%s.open' % builtins_name)
+    @mock.patch('requests.Session.post')
+    @mock.patch('requests.Session.get')
+    def test_authorize(self, mock_get, mock_post, mock_open, mock_listdir, mock_unlink, mock_mkdir, mock_isdir):
         client_id = "bar"
         api_key = "foo"
         code = "foobar"
@@ -331,73 +338,110 @@ class TestAuthorization(unittest.TestCase):
                 res.json.return_value = {}
                 return res
 
-        with mock.patch('requests.Session.get', side_effect=_get):
-            with mock.patch('requests.Session.post', side_effect=_post):
-                eve = pycrest.EVE(api_key=api_key, client_id=client_id, redirect_uri="http://foo.bar")
-                auth_uri = "%s/authorize?response_type=code&redirect_uri=%s&client_id=%s&scope=publicData" % (
-                    eve._oauth_endpoint,
-                    quote("http://foo.bar", safe=''),
-                    client_id,
-                )
-                self.assertEqual(eve.auth_uri(scopes=["publicData"]), auth_uri)
-                con = eve.authorize(code)
-                self.assertRaises(APIException, lambda: eve.authorize("notcode"))
-                r = con.refresh()
+        fs = MockFilesystem()
+        mock_isdir.side_effect = fs.isdir
+        mock_mkdir.side_effect = fs.mkdir
+        mock_unlink.side_effect = fs.unlink
+        mock_listdir.side_effect = fs.listdir
+        mock_open.side_effect = fs.open
+        mock_post.side_effect = _post
+        mock_get.side_effect = _get
 
-                self.assertRaises(AttributeError, con.__getattr__, 'marketData')
-                con()
-                self.assertEqual(con.marketData.href, "getMarketData")
-                self.assertEqual(con.marketData().totalCount, 2)
-                self.assertEqual(con.marketData().foo.foo, "Bar")
+        eve = pycrest.EVE(api_key=api_key, client_id=client_id, redirect_uri="http://foo.bar")
+        auth_uri = "%s/authorize?response_type=code&redirect_uri=%s&client_id=%s&scope=publicData" % (
+            eve._oauth_endpoint,
+            quote("http://foo.bar", safe=''),
+            client_id,
+        )
+        self.assertEqual(eve.auth_uri(scopes=["publicData"]), auth_uri)
+        con = eve.authorize(code)
+        self.assertRaises(APIException, lambda: eve.authorize("notcode"))
+        r = con.refresh()
 
-                info = con.whoami()
-                self.assertEqual(info['CharacterName'], 'Foobar')
-                info = con.whoami()
-                self.assertEqual(info['CharacterName'], con._cache['whoami']['CharacterName'])
-                info = r.whoami()
-                self.assertEqual(info['CharacterName'], 'Foobar')
+        self.assertRaises(AttributeError, con.__getattr__, 'marketData')
+        con()
+        self.assertEqual(con.marketData.href, "getMarketData")
+        self.assertEqual(con.marketData().totalCount, 2)
+        self.assertEqual(con.marketData().foo.foo, "Bar")
 
-                r.refresh_token = "notright"
-                self.assertRaises(APIException, lambda: r.refresh())
+        info = con.whoami()
+        self.assertEqual(info['CharacterName'], 'Foobar')
+        info = con.whoami()
+        self.assertEqual(info['CharacterName'], con._cache['whoami']['CharacterName'])
+        info = r.whoami()
+        self.assertEqual(info['CharacterName'], 'Foobar')
 
-                eve = pycrest.EVE(api_key=api_key, client_id=client_id, cache_time=0)
-                con = eve.authorize(code)
-                self.assertEqual(con().marketData().totalCount, 2)
-                self.assertEqual(con().marketData().totalCount, 2)
+        r.refresh_token = "notright"
+        self.assertRaises(APIException, lambda: r.refresh())
 
-                # auth with refresh token
-                con = eve.refr_authorize(con.refresh_token)
-                self.assertRaises(AttributeError, con.__getattr__, 'marketData')
-                con()
-                self.assertEqual(con.marketData.href, "getMarketData")
-                self.assertEqual(con.marketData().totalCount, 2)
-                self.assertEqual(con.marketData().foo.foo, "Bar")
+        eve = pycrest.EVE(api_key=api_key, client_id=client_id, cache_time=0)
+        con = eve.authorize(code)
+        self.assertEqual(con().marketData().totalCount, 2)
+        self.assertEqual(con().marketData().totalCount, 2)
 
-                # fail auth with refresh token
-                self.assertRaises(APIException, lambda: eve.refr_authorize('notright'))
+        # auth with refresh token
+        con = eve.refr_authorize(con.refresh_token)
+        self.assertRaises(AttributeError, con.__getattr__, 'marketData')
+        con()
+        self.assertEqual(con.marketData.href, "getMarketData")
+        self.assertEqual(con.marketData().totalCount, 2)
+        self.assertEqual(con.marketData().foo.foo, "Bar")
 
-                # auth with temp token
-                con = eve.temptoken_authorize(con.token,
-                                              con.expires - time.time(),
-                                              con.refresh_token)
-                self.assertRaises(AttributeError, con.__getattr__, 'marketData')
-                con()
-                self.assertEqual(con.marketData.href, "getMarketData")
-                self.assertEqual(con.marketData().totalCount, 2)
-                self.assertEqual(con.marketData().foo.foo, "Bar")
+        # fail auth with refresh token
+        self.assertRaises(APIException, lambda: eve.refr_authorize('notright'))
 
-                # fail auth with temp token
-                con = eve.temptoken_authorize('nottoken',
-                                              con.expires - time.time(),
-                                              con.refresh_token)()
-                self.assertRaises(APIException, lambda: con().marketData())
+        # auth with temp token
+        con = eve.temptoken_authorize(con.token,
+                                      con.expires - time.time(),
+                                      con.refresh_token)
+        self.assertRaises(AttributeError, con.__getattr__, 'marketData')
+        con()
+        self.assertEqual(con.marketData.href, "getMarketData")
+        self.assertEqual(con.marketData().totalCount, 2)
+        self.assertEqual(con.marketData().foo.foo, "Bar")
 
-                # test auto-refresh of expired token
-                con = eve.temptoken_authorize(access_token,
-                                              -1,
-                                              refresh_token)
-                con().marketData()
-                self.assertGreater(con.expires, time.time())
+        # fail auth with temp token
+        con = eve.temptoken_authorize('nottoken',
+                                      con.expires - time.time(),
+                                      con.refresh_token)()
+        self.assertRaises(APIException, lambda: con().marketData())
+
+        # test auto-refresh of expired token
+        con = eve.temptoken_authorize(access_token,
+                                      -1,
+                                      refresh_token)
+        con().marketData()
+        self.assertGreater(con.expires, time.time())
+
+        # test cache miss
+        eve = pycrest.EVE(api_key=api_key, client_id=client_id, cache_dir='/cachedir')
+        con = eve.authorize(code)
+        times_get = mock_get.call_count
+        con()
+        self.assertEqual(mock_get.call_count, times_get + 1)
+
+        # test cache hit
+        times_get = mock_get.call_count
+        con()
+        self.assertEqual(mock_get.call_count, times_get)
+
+        # test cache stale
+        ls = list(os.listdir('/cachedir'))
+        self.assertEquals(len(ls), 1)
+        path = os.path.join('/cachedir', ls[0])
+
+        recf = open(path, 'r')
+        rec = pickle.loads(zlib.decompress(recf.read()))
+        recf.close()
+        rec['timestamp'] -= eve.cache_time
+
+        recf = open(path, 'w')
+        recf.write(zlib.compress(pickle.dumps(rec)))
+        recf.close()
+
+        times_get = mock_get.call_count
+        con().marketData()
+        self.assertEqual(times_get + 1, mock_get.call_count)
 
 
 class TestApiCache(unittest.TestCase):
