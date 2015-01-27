@@ -72,8 +72,9 @@ class APIConnection(object):
         self._useragent = "PyCrest v %s" % version if not user_agent else user_agent
         self.cache_time = cache_time
         self.session = requests.Session()
-        if cache_dir:
-            self.cache = APICache(cache_dir)
+        self.cache_dir = cache_dir
+        if self.cache_dir:
+            self.cache = APICache(self.cache_dir)
         else:
             self.cache = None
 
@@ -175,7 +176,12 @@ class EVE(APIConnection):
 
     def authorize(self, code):
         res = self._authorize(params={"grant_type": "authorization_code", "code": code})
-        return AuthedConnection(res, self._authed_endpoint, self._oauth_endpoint, self.client_id, self.api_key)
+        return AuthedConnection(res,
+                                self._authed_endpoint,
+                                self._oauth_endpoint,
+                                self.client_id,
+                                self.api_key,
+                                cache_dir=self.cache_dir)
 
     def refr_authorize(self, refresh_token):
         res = self._authorize(params={"grant_type": "refresh_token", "refresh_token": refresh_token})
@@ -185,7 +191,8 @@ class EVE(APIConnection):
                                 self._authed_endpoint,
                                 self._oauth_endpoint,
                                 self.client_id,
-                                self.api_key)
+                                self.api_key,
+                                cache_dir=self.cache_dir)
 
     def temptoken_authorize(self, access_token, expires_in, refresh_token):
         return AuthedConnection({'access_token': access_token,
@@ -194,7 +201,8 @@ class EVE(APIConnection):
                                 self._authed_endpoint,
                                 self._oauth_endpoint,
                                 self.client_id,
-                                self.api_key)
+                                self.api_key,
+                                cache_dir=self.cache_dir)
 
 
 class AuthedConnection(EVE):
