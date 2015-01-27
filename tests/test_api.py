@@ -1,7 +1,7 @@
 import base64
-import requests
-import time
 import os
+import zlib
+import time
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
 
@@ -20,6 +20,10 @@ try:
 except ImportError:
     import builtins
     builtins_name = builtins.__name__
+try:
+    import pickle
+except ImportError:
+    import cPickle as pickle
 import httmock
 import pycrest
 import mock
@@ -99,7 +103,13 @@ def root_mock(url, request):
             "incursions": {
                 "href": "https://public-crest.eveonline.com/incursions/",
             },
-            "status": {"eve": "online"}
+            "status": {"eve": "online"},
+            "queryString": {
+                "href": "https://public-crest.eveonline.com/queryString/"
+            },
+            "paginatedData": {
+                "href": "https://public-crest.eveonline.com/getPage/?page=2"
+            }
         },
     }
 
@@ -158,6 +168,7 @@ def verify_mock(url, request):
 
 @httmock.all_requests
 def fallback_mock(url, request):
+    print("No mock for: %s" % request.url)
     return {
         "status_code": 404,
         "body": {},
@@ -180,6 +191,22 @@ class TestApi(unittest.TestCase):
         mock_unlink.side_effect = fs.unlink
         mock_listdir.side_effect = fs.listdir
         mock_open.side_effect = fs.open
+
+        @httmock.urlmatch(scheme="https", netloc=r"^public-crest.eveonline.com$", path=r"^/queryString/?$")
+        def test_qs(url, request):
+            self.assertEqual(url.query, "query=string")
+            return {"status_code": 200, "content": {}}
+
+        @httmock.urlmatch(scheme="https", netloc=r"^public-crest.eveonline.com$", path=r"^/getPage/?$")
+        def test_pagination(url, request):
+            self.assertEqual(url.query, "page=2")
+            return {"status_code": 200, "content": {}}
+
+        with httmock.HTTMock(test_qs, test_pagination, *all_mocks):
+            eve = pycrest.EVE()
+            eve().queryString(query="string")
+            eve.paginatedData()
+
         with httmock.HTTMock(*all_mocks):
             eve = pycrest.EVE()
             self.assertRaises(AttributeError, eve.__getattr__, 'marketData')
@@ -191,6 +218,31 @@ class TestApi(unittest.TestCase):
             self.assertEqual(eve.marketData().items[3], "baz")
             self.assertEqual(eve().status().eve, "online")
             self.assertRaises(APIException, lambda: eve.incursions())  # Scala's notation would be nice
+            # cache miss
+            eve = pycrest.EVE(cache_dir='/cachedir')
+            eve()
+
+            # cache hit
+            eve = pycrest.EVE(cache_dir='/cachedir')
+            eve()
+
+            # stale cache hit
+            ls = list(os.listdir('/cachedir'))
+            self.assertEquals(len(ls), 1)
+            path = os.path.join('/cachedir', ls[0])
+
+            recf = open(path, 'r')
+            rec = pickle.loads(zlib.decompress(recf.read()))
+            recf.close()
+            rec['timestamp'] -= eve.cache_time
+
+            recf = open(path, 'w')
+            recf.write(zlib.compress(pickle.dumps(rec)))
+            recf.close()
+
+            eve = pycrest.EVE(cache_dir='/cachedir')
+            eve()
+
 
             testing = pycrest.EVE(testing=True)
             self.assertEqual(testing._public_endpoint, "http://public-crest-sisi.testeveonline.com/")
@@ -297,7 +349,7 @@ class TestAuthorization(unittest.TestCase):
                     return {"status_code": 200, "content": body}
             return {"status_code": 403, "content": {}}
 
-        with httmock.HTTMock(token_mock, *all_mocks):
+        with httmock.HTTMock(token_mock, *all_mocks) as fake_http:
             eve = pycrest.EVE(api_key=api_key, client_id=client_id, redirect_uri="http://foo.bar")
             auth_uri = "%s/authorize?response_type=code&redirect_uri=%s&client_id=%s&scope=publicData" % (
                 eve._oauth_endpoint,
@@ -329,6 +381,64 @@ class TestAuthorization(unittest.TestCase):
             con = eve.authorize(code)
             self.assertEqual(con().marketData().totalCount, 2)
             self.assertEqual(con().marketData().totalCount, 2)
+
+            # auth with refresh token
+            con = eve.refr_authorize(con.refresh_token)
+            self.assertRaises(AttributeError, con.__getattr__, 'marketData')
+            con()
+            self.assertEqual(con.marketData.href, "https://public-crest.eveonline.com/market/prices/")
+            self.assertEqual(con.marketData().totalCount, 2)
+            self.assertEqual(con.marketData().items[1].type.name, "Rifter")
+
+            # fail auth with refresh token
+            self.assertRaises(APIException, lambda: eve.refr_authorize('notright'))
+
+            # auth with temp token
+            con = eve.temptoken_authorize(con.token,
+                                          con.expires - time.time(),
+                                          con.refresh_token)
+            self.assertRaises(AttributeError, con.__getattr__, 'marketData')
+            con()
+            self.assertEqual(con.marketData.href, "https://public-crest.eveonline.com/market/prices/")
+            self.assertEqual(con.marketData().totalCount, 2)
+            self.assertEqual(con.marketData().items[1].type.name, "Rifter")
+
+            # test auto-refresh of expired token
+            con = eve.temptoken_authorize(access_token,
+                                          -1,
+                                          refresh_token)
+            con().marketData()
+            self.assertGreater(con.expires, time.time())
+
+            # test cache miss
+            eve = pycrest.EVE(api_key=api_key, client_id=client_id, cache_dir='/cachedir')
+            con = eve.authorize(code)
+            times_get = fake_http.call_count
+            con()
+            self.assertEqual(fake_http.call_count, times_get + 1)
+
+            # test cache hit
+            times_get = fake_http.call_count
+            con()
+            self.assertEqual(fake_http.call_count, times_get)
+
+            # test cache stale
+            ls = list(os.listdir('/cachedir'))
+            self.assertEquals(len(ls), 1)
+            path = os.path.join('/cachedir', ls[0])
+
+            recf = open(path, 'r')
+            rec = pickle.loads(zlib.decompress(recf.read()))
+            recf.close()
+            rec['timestamp'] -= eve.cache_time
+
+            recf = open(path, 'w')
+            recf.write(zlib.compress(pickle.dumps(rec)))
+            recf.close()
+
+            times_get = fake_http.call_count
+            con().marketData()
+            self.assertEqual(times_get + 1, fake_http.call_count)
 
 
 class TestApiCache(unittest.TestCase):

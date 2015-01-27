@@ -248,7 +248,6 @@ class APIObject(object):
     def __init__(self, parent, connection):
         self._dict = {}
         self.connection = connection
-        self._cache = {}
         for k, v in parent.items():
             if type(v) is dict:
                 self._dict[k] = APIObject(v, connection)
@@ -272,14 +271,9 @@ class APIObject(object):
         return self._dict[item]
 
     def __call__(self, **kwargs):
-        hkwargs = frozenset(kwargs.items())
-        cached = hkwargs in self._cache
-        if ((not cached) or int(time.time()) - self._cache[hkwargs][0] > self.connection.cache_time) and 'href' in self._dict:
-            logger.debug("%s with params %s not yet loaded", self._dict['href'], kwargs)
-            self._cache[hkwargs] = (int(time.time()), APIObject(self.connection.get(self._dict['href'], params=kwargs), self.connection))
-            return self._cache[hkwargs][1]
-        elif cached:
-            return self._cache[hkwargs][1]
+        # Caching is now handled by APIConnection
+        if 'href' in self._dict:
+            return APIObject(self.connection.get(self._dict['href'], params=kwargs), self.connection)
         else:
             return self
 
