@@ -23,8 +23,10 @@ try:
 except ImportError:  # pragma: no cover
     from urllib import quote
 import logging
+import re
 
 logger = logging.getLogger("pycrest.eve")
+cache_re = re.compile(r'max-age=([0-9]+)')
 
 
 class APICache(object):
@@ -93,8 +95,7 @@ class DictCache(APICache):
 
 
 class APIConnection(object):
-    def __init__(self, additional_headers=None, user_agent=None, cache_time=600, cache_dir=None):
-        self.cache_time = cache_time
+    def __init__(self, additional_headers=None, user_agent=None, cache_dir=None):
         # Set up a Requests Session
         session = requests.Session()
         if additional_headers is None:
@@ -135,7 +136,7 @@ class APIConnection(object):
         # check cache
         key = (resource, frozenset(self._session.headers.items()), frozenset(prms.items()))
         cached = self.cache.get(key)
-        if cached and time.time() - cached['timestamp'] < self.cache_time:
+        if cached and cached['expires'] > time.time():
             logger.debug('Cache hit for resource %s (params=%s)', resource, prms)
             return cached['payload']
         elif cached:
@@ -153,9 +154,21 @@ class APIConnection(object):
 
         # cache result
         key = (resource, frozenset(self._session.headers.items()), frozenset(prms.items()))
-        self.cache.put(key, {'timestamp': time.time(), 'payload': ret})
+        expires = self._get_expires(res)
+        if expires > 0:
+            self.cache.put(key, {'expires': time.time() + expires, 'payload': ret})
 
         return ret
+
+    def _get_expires(self, response):
+        if 'Cache-Control' not in response.headers:
+            return 0
+        if any([s in response.headers['Cache-Control'] for s in ['no-cache', 'no-store']]):
+            return 0
+        match = cache_re.search(response.headers['Cache-Control'])
+        if match:
+            return int(match.group(1))
+        return 0
 
 
 class EVE(APIConnection):
@@ -176,8 +189,7 @@ class EVE(APIConnection):
         self._endpoint = self._public_endpoint
         self._cache = {}
         self._data = None
-        APIConnection.__init__(self, cache_time=kwargs.pop('cache_time', 600),
-                               cache_dir=kwargs.pop('cache_dir', None), **kwargs)
+        APIConnection.__init__(self, cache_dir=kwargs.pop('cache_dir', None), **kwargs)
 
     def __call__(self):
         if not self._data:

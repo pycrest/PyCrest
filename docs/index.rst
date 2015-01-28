@@ -59,8 +59,9 @@ desired resource:
 
 .. highlight:: none
 
-By default resources are cached for 10 minutes to avoid excessive overhead when accessing nested resources.  This time
-can be changed by providing the `cache_time` keyword argument to the EVE constructor.
+By default resources are cached in-memory, you can change this behaviour by passing the `cache_dir` keyword
+argument to the EVE class.  If you do so, the responses will be cached in the filesystem, allowing the cache
+to persist across multiple instances of the application.
 
 Authorized Connections
 ======================

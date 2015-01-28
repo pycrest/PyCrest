@@ -6,7 +6,7 @@ python:
   - "3.3"
   - "3.4"
   - "pypy"
-install: pip install mako coveralls testtools https://github.com/Dreae/httmock/archive/master.zip
+install: pip install coveralls testtools mock https://github.com/Dreae/httmock/archive/master.zip
 script: coverage run setup.py test
 after_success: coveralls
 notifications:

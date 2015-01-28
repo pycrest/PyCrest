@@ -111,6 +111,9 @@ def root_mock(url, request):
                 "href": "https://public-crest.eveonline.com/getPage/?page=2"
             }
         },
+        "headers": {
+            "Cache-Control": "private, max-age=300"
+        }
     }
 
 
@@ -153,6 +156,9 @@ def market_mock(url, request):
     return {
         "status_code": 200,
         "content": body,
+        "headers": {
+            "Cache-Control": "private, max-age=300"
+        }
     }
 
 
@@ -234,7 +240,7 @@ class TestApi(unittest.TestCase):
             recf = open(path, 'r')
             rec = pickle.loads(zlib.decompress(recf.read()))
             recf.close()
-            rec['timestamp'] -= eve.cache_time
+            rec['expires'] = 1
 
             recf = open(path, 'w')
             recf.write(zlib.compress(pickle.dumps(rec)))
@@ -377,7 +383,7 @@ class TestAuthorization(unittest.TestCase):
             r.refresh_token = "notright"
             self.assertRaises(APIException, lambda: r.refresh())
 
-            eve = pycrest.EVE(api_key=api_key, client_id=client_id, cache_time=0)
+            eve = pycrest.EVE(api_key=api_key, client_id=client_id)
             con = eve.authorize(code)
             self.assertEqual(con().marketData().totalCount, 2)
             self.assertEqual(con().marketData().totalCount, 2)
@@ -430,7 +436,7 @@ class TestAuthorization(unittest.TestCase):
             recf = open(path, 'r')
             rec = pickle.loads(zlib.decompress(recf.read()))
             recf.close()
-            rec['timestamp'] -= eve.cache_time
+            rec['expires'] = 1
 
             recf = open(path, 'w')
             recf.write(zlib.compress(pickle.dumps(rec)))
@@ -500,3 +506,124 @@ class TestApiCache(unittest.TestCase):
         fs.mkdir(crest.cache._getpath('key'))
         self.assertRaises(OSError, lambda: crest.cache.invalidate('key'))
         self.assertRaises(IOError, lambda: crest.cache.get('key'))
+
+    def test_cache_control(self):
+        @httmock.all_requests
+        def root_m(url, request):
+            body = {
+                "shouldCache": {
+                    "href": "https://foo.bar/shouldCache/"
+                },
+                "shouldNotCache": {
+                    "href": "https://foo.bar/shouldNotCache/"
+                },
+                "noCache": {
+                    "href": "https://foo.bar/noCache/"
+                },
+                "noStore": {
+                    "href": "https://foo.bar/noStore/"
+                },
+                "brokenInt": {
+                    "href": "https://foo.bar/brokenInt"
+                }
+            }
+            return {
+                "status_code": 200,
+                "content": body
+            }
+
+        @httmock.urlmatch(path=r'^/shouldCache/?$')
+        def shouldCache(url, request):
+            return {
+                "status_code": 200,
+                "content": {
+                    "href": "shouldCache"
+                },
+                "headers": {
+                    "Cache-Control": "private, max-age=300"
+                }
+            }
+
+        @httmock.urlmatch(path=r'^/shouldNotCache/?$')
+        def shouldNotCache(url, request):
+            return {
+                "status_code": 200,
+                "content": {
+                    "href": "shouldNotCache"
+                }
+            }
+
+        @httmock.urlmatch(path=r'^/noCache/?$')
+        def noCache(url, request):
+            return {
+                "status_code": 200,
+                "content": {
+                    "href": "noCache"
+                },
+                "headers": {
+                    "Cache-Control": "no-cache, max-age=300"
+                }
+            }
+
+        @httmock.urlmatch(path=r'^/noStore/?$')
+        def noStore(url, request):
+            return {
+                "status_code": 200,
+                "content": {
+                    "href": "noStore"
+                },
+                "headers": {
+                    "Cache-Control": "no-store, max-age=300"
+                }
+            }
+
+        @httmock.urlmatch(path=r'^/brokenInt/?$')
+        def brokenInt(url, request):
+            return {
+                "status_code": 200,
+                "content": {
+                    "href": "brokenInt"
+                },
+                "headers": {
+                    "Cache-Control": "private, max-age=asd"
+                }
+            }
+
+        with httmock.HTTMock(shouldCache, shouldNotCache, noCache, noStore, brokenInt, root_m) as fake_http:
+            eve = pycrest.EVE()
+            eve()
+
+            call_count = fake_http.call_count
+            eve.shouldCache()
+            self.assertEqual(fake_http.call_count, call_count + 1)
+            call_count = fake_http.call_count
+            eve.shouldCache()
+            self.assertEqual(fake_http.call_count, call_count)
+
+            call_count = fake_http.call_count
+            eve.shouldNotCache()
+            self.assertEqual(fake_http.call_count, call_count + 1)
+            call_count = fake_http.call_count
+            eve.shouldNotCache()
+            self.assertEqual(fake_http.call_count, call_count + 1)
+
+            call_count = fake_http.call_count
+            eve.noCache()
+            self.assertEqual(fake_http.call_count, call_count + 1)
+            call_count = fake_http.call_count
+            eve.noCache()
+            self.assertEqual(fake_http.call_count, call_count + 1)
+
+            call_count = fake_http.call_count
+            eve.noStore()
+            self.assertEqual(fake_http.call_count, call_count + 1)
+            call_count = fake_http.call_count
+            eve.noStore()
+            self.assertEqual(fake_http.call_count, call_count + 1)
+
+            call_count = fake_http.call_count
+            eve.brokenInt()
+            self.assertEqual(fake_http.call_count, call_count + 1)
+            call_count = fake_http.call_count
+            eve.brokenInt()
+            self.assertEqual(fake_http.call_count, call_count + 1)
