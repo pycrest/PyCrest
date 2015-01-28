@@ -453,6 +453,21 @@ class TestApiCache(unittest.TestCase):
         mock_unlink.side_effect = fs.unlink
         mock_open.side_effect = fs.open
 
+        # Just because pragma: no cover is ugly
+        cache = pycrest.eve.APICache()
+        self.assertRaises(NotImplementedError, lambda: cache.get("foo"))
+        self.assertRaises(NotImplementedError, lambda: cache.put("foo", "bar"))
+        self.assertRaises(NotImplementedError, lambda: cache.invalidate("foo"))
+
+        # Test default DictCache
+        crest = pycrest.EVE()
+        self.assertEqual(type(crest.cache).__name__, "DictCache")
+        crest.cache.invalidate('nxkey')
+        self.assertEqual(crest.cache.get('nxkey'), None)
+        crest.cache.put('key', 'value')
+        self.assertEqual(crest.cache.get('key'), 'value')
+
+
         # with mkdir needed
         crest = pycrest.EVE(cache_dir="/cachedir")
 
@@ -460,7 +475,7 @@ class TestApiCache(unittest.TestCase):
         crest = pycrest.EVE(cache_dir="/cachedir")
 
         # cache created?
-        self.assertEqual(type(crest.cache).__name__, "APICache")
+        self.assertEqual(type(crest.cache).__name__, "FileCache")
 
         # invalidate non-existing key
         crest.cache.invalidate('nxkey')

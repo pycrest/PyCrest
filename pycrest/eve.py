@@ -28,6 +28,17 @@ logger = logging.getLogger("pycrest.eve")
 
 
 class APICache(object):
+    def put(self, key, value):
+        raise NotImplementedError
+
+    def get(self, key):
+        raise NotImplementedError
+
+    def invalidate(self, key):
+        raise NotImplementedError
+
+
+class FileCache(APICache):
     def __init__(self, path):
         self._cache = {}
         self.path = path
@@ -67,6 +78,20 @@ class APICache(object):
                 raise
 
 
+class DictCache(APICache):
+    def __init__(self):
+        self._dict = {}
+
+    def get(self, key):
+        return self._dict.get(key, None)
+
+    def put(self, key, value):
+        self._dict[key] = value
+
+    def invalidate(self, key):
+        self._dict.pop(key, None)
+
+
 class APIConnection(object):
     def __init__(self, additional_headers=None, user_agent=None, cache_time=600, cache_dir=None):
         self.cache_time = cache_time
@@ -86,9 +111,9 @@ class APIConnection(object):
         self._session = session
         self.cache_dir = cache_dir
         if self.cache_dir:
-            self.cache = APICache(self.cache_dir)
+            self.cache = FileCache(self.cache_dir)
         else:
-            self.cache = None
+            self.cache = DictCache()
 
     def get(self, resource, params=None):
         logger.debug('Getting resource %s', resource)
@@ -108,17 +133,16 @@ class APIConnection(object):
             prms[key] = params[key]
 
         # check cache
-        if self.cache:
-            key = (resource, frozenset(self._session.headers.items()), frozenset(prms.items()))
-            cached = self.cache.get(key)
-            if cached and time.time() - cached['timestamp'] < self.cache_time:
-                logger.debug('Cache hit for resource %s (params=%s)', resource, prms)
-                return cached['payload']
-            elif cached:
-                logger.debug('Cache stale for resource %s (params=%s)', resource, prms)
-                self.cache.invalidate(key)
-            else:
-                logger.debug('Cache miss for resource %s (params=%s', resource, prms)
+        key = (resource, frozenset(self._session.headers.items()), frozenset(prms.items()))
+        cached = self.cache.get(key)
+        if cached and time.time() - cached['timestamp'] < self.cache_time:
+            logger.debug('Cache hit for resource %s (params=%s)', resource, prms)
+            return cached['payload']
+        elif cached:
+            logger.debug('Cache stale for resource %s (params=%s)', resource, prms)
+            self.cache.invalidate(key)
+        else:
+            logger.debug('Cache miss for resource %s (params=%s', resource, prms)
 
         logger.debug('Getting resource %s (params=%s)', resource, prms)
         res = self._session.get(resource, params=prms)
@@ -128,9 +152,9 @@ class APIConnection(object):
         ret = res.json()
 
         # cache result
-        if self.cache:
-            key = (resource, frozenset(self._session.headers.items()), frozenset(prms.items()))
-            self.cache.put(key, {'timestamp': time.time(), 'payload': ret})
+        key = (resource, frozenset(self._session.headers.items()), frozenset(prms.items()))
+        self.cache.put(key, {'timestamp': time.time(), 'payload': ret})
+
         return ret
 
 
