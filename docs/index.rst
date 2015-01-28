@@ -59,6 +59,39 @@ desired resource:
 
 .. highlight:: none
 
+Some useful helper methods to make your life easier / improve readability of next example:
+
+.. highlight:: python
+
+>>> def getByAttrVal(objlist, attr, val):
+...     ''' Searches list of dicts for a dict with dict[attr] == val '''
+...     matches = [getattr(obj, attr) == val for obj in objlist]
+...     index = matches.index(True)  # find first match, raise ValueError if not found
+...     return objlist[index]
+...
+>>> def getAllItems(page):
+...     ''' Fetch data from all pages '''
+...     ret = page().items
+...     while hasattr(page(), 'next'):
+...         page = page().next()
+...         ret.extend(page().items)
+...     return ret
+...
+
+.. highlight:: none
+
+You can also pass parameters to resources supporting/requiring them, eg. `type` parameter for the regional
+market data endpoint:
+
+.. highlight:: none
+
+>>> region = getByAttrVal(eve.regions().items, 'name', 'Catch')
+>>> item = getByAttrVal(getAllItems(eve.itemTypes), 'name', 'Tritanium').href
+>>> getAllItems(region().marketSellOrders(type=item))
+[{u'price': 9.29, u'volume': 1766874, u'location': {'name': u'V-3YG7 VI - EMMA STONE NUMBER ONE', ...}, ...}, ... ]
+
+.. highlight:: none
+
 By default resources are cached in-memory, you can change this behaviour by passing the `cache_dir` keyword
 argument to the EVE class.  If you do so, the responses will be cached in the filesystem, allowing the cache
 to persist across multiple instances of the application.
@@ -100,8 +133,9 @@ on an authorized connection:
 
 .. highlight:: none
 
-Note that currently CREST authorization tokens expire after 1200 seconds.  You can receive a new connection using the
-refresh token by calling `refresh()` on the authorized connection:
+Note that currently CREST authorization tokens expire after 1200 seconds and are automatically refreshed upon expiry.
+You can also refresh tokens manually by calling `refresh()` on the authorized connection. This refreshes the connection
+in-place and also returns `self` for backward compatibility.
 
 .. highlight:: python
 
