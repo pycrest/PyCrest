@@ -627,3 +627,10 @@ class TestApiCache(unittest.TestCase):
             call_count = fake_http.call_count
             eve.brokenInt()
             self.assertEqual(fake_http.call_count, call_count + 1)
+
+            eve = pycrest.EVE()
+            eve()
+            with mock.patch('time.time') as mock_time:
+                mock_time.return_value = 0
+                eve.shouldCache()
+                self.assertEqual(list(eve.cache._dict.items())[0][1]['expires'], 300)

@@ -83,7 +83,7 @@ Some useful helper methods to make your life easier / improve readability of nex
 You can also pass parameters to resources supporting/requiring them, eg. `type` parameter for the regional
 market data endpoint:
 
-.. highlight:: none
+.. highlight:: python
 
 >>> region = getByAttrVal(eve.regions().items, 'name', 'Catch')
 >>> item = getByAttrVal(getAllItems(eve.itemTypes), 'name', 'Tritanium').href
