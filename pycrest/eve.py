@@ -51,7 +51,7 @@ class FileCache(APICache):
         return os.path.join(self.path, str(hash(key)) + '.cache')
 
     def put(self, key, value):
-        with open(self._getpath(key), 'w') as f:
+        with open(self._getpath(key), 'wb') as f:
             f.write(zlib.compress(pickle.dumps(value, -1)))
         self._cache[key] = value
 
@@ -60,7 +60,7 @@ class FileCache(APICache):
             return self._cache[key]
 
         try:
-            with open(self._getpath(key), 'r') as f:
+            with open(self._getpath(key), 'rb') as f:
                 return pickle.loads(zlib.decompress(f.read()))
         except IOError as ex:
             if ex.errno == 2:  # file does not exist (yet)
