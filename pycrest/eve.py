@@ -304,7 +304,9 @@ class APIObject(object):
         return new
 
     def __getattr__(self, item):
-        return self._dict[item]
+        if item in self._dict:
+            return self._dict[item]
+        raise AttributeError(item)
 
     def __call__(self, **kwargs):
         # Caching is now handled by APIConnection
