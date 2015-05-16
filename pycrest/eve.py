@@ -262,8 +262,6 @@ class AuthedConnection(EVE):
 
     def __call__(self):
         if not self._data:
-            if int(time.time()) >= self.expires:
-                self.refresh()
             self._data = APIObject(self.get(self._endpoint), self)
         return self._data
 
@@ -278,6 +276,11 @@ class AuthedConnection(EVE):
         self.expires = int(time.time()) + res['expires_in']
         self._session.headers.update({"Authorization": "Bearer %s" % self.token})
         return self  # for backwards compatibility
+
+    def get(self, resource, params=None):
+        if int(time.time()) >= self.expires:
+            self.refresh()
+        return super(self.__class__, self).get(resource, params)
 
 
 class APIObject(object):
