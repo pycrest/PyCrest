@@ -95,7 +95,7 @@ class DictCache(APICache):
 
 
 class APIConnection(object):
-    def __init__(self, additional_headers=None, user_agent=None, cache_dir=None):
+    def __init__(self, additional_headers=None, user_agent=None, cache_dir=None, cache=None):
         # Set up a Requests Session
         session = requests.Session()
         if additional_headers is None:
@@ -110,8 +110,13 @@ class APIConnection(object):
         session.mount('https://public-crest.eveonline.com',
                 WeakCiphersAdapter())
         self._session = session
-        self.cache_dir = cache_dir
-        if self.cache_dir:
+        if cache:
+            if isinstance(cache, APICache):
+                self.cache = cache  # Inherit from parents
+            elif isinstance(cache, type):
+                self.cache = cache()  # Instantiate a new cache
+        elif cache_dir:
+            self.cache_dir = cache_dir
             self.cache = FileCache(self.cache_dir)
         else:
             self.cache = DictCache()
@@ -189,7 +194,7 @@ class EVE(APIConnection):
         self._endpoint = self._public_endpoint
         self._cache = {}
         self._data = None
-        APIConnection.__init__(self, cache_dir=kwargs.pop('cache_dir', None), **kwargs)
+        APIConnection.__init__(self, **kwargs)
 
     def __call__(self):
         if not self._data:
@@ -224,7 +229,7 @@ class EVE(APIConnection):
                                 self._oauth_endpoint,
                                 self.client_id,
                                 self.api_key,
-                                cache_dir=self.cache_dir)
+                                cache=self.cache)
 
     def refr_authorize(self, refresh_token):
         res = self._authorize(params={"grant_type": "refresh_token", "refresh_token": refresh_token})
@@ -235,7 +240,7 @@ class EVE(APIConnection):
                                 self._oauth_endpoint,
                                 self.client_id,
                                 self.api_key,
-                                cache_dir=self.cache_dir)
+                                cache=self.cache)
 
     def temptoken_authorize(self, access_token, expires_in, refresh_token):
         return AuthedConnection({'access_token': access_token,
@@ -245,7 +250,7 @@ class EVE(APIConnection):
                                 self._oauth_endpoint,
                                 self.client_id,
                                 self.api_key,
-                                cache_dir=self.cache_dir)
+                                cache=self.cache)
 
 
 class AuthedConnection(EVE):
