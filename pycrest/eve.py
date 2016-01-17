@@ -30,7 +30,7 @@ cache_re = re.compile(r'max-age=([0-9]+)')
 
 
 class APICache(object):
-    def put(self, key, value):
+    def put(self, key, value, ex):
         raise NotImplementedError
 
     def get(self, key):
@@ -50,9 +50,9 @@ class FileCache(APICache):
     def _getpath(self, key):
         return os.path.join(self.path, str(hash(key)) + '.cache')
 
-    def put(self, key, value):
+    def put(self, key, value, ex):
         with open(self._getpath(key), 'wb') as f:
-            f.write(zlib.compress(pickle.dumps(value, -1)))
+            f.write(zlib.compress(pickle.dumps((value, ex), -1)))
         self._cache[key] = value
 
     def get(self, key):
@@ -61,7 +61,14 @@ class FileCache(APICache):
 
         try:
             with open(self._getpath(key), 'rb') as f:
-                return pickle.loads(zlib.decompress(f.read()))
+                ret = pickle.loads(zlib.decompress(f.read()))
+                if ret[1] > time.time():
+                    return ret[0]
+
+            # if we are here, we got stale cache, so we can invalidate it
+            self.invalidate(key)
+            return None
+
         except IOError as ex:
             if ex.errno == 2:  # file does not exist (yet)
                 return None
@@ -85,10 +92,20 @@ class DictCache(APICache):
         self._dict = {}
 
     def get(self, key):
-        return self._dict.get(key, None)
+        ret = self._dict.get(key, None)
+        if ret is not None and ret[1] > time.time():
+            # cache hit
+            return ret[0]
+        elif ret is None:
+            # cache miss
+            return None
+        else:
+            # stale, delete from cache
+            self.invalidate(key)
+            return None
 
-    def put(self, key, value):
-        self._dict[key] = value
+    def put(self, key, value, ex):
+        self._dict[key] = value, ex
 
     def invalidate(self, key):
         self._dict.pop(key, None)
@@ -141,12 +158,9 @@ class APIConnection(object):
         # check cache
         key = (resource, frozenset(self._session.headers.items()), frozenset(prms.items()))
         cached = self.cache.get(key)
-        if cached and cached['expires'] > time.time():
+        if cached:
             logger.debug('Cache hit for resource %s (params=%s)', resource, prms)
-            return cached['payload']
-        elif cached:
-            logger.debug('Cache stale for resource %s (params=%s)', resource, prms)
-            self.cache.invalidate(key)
+            return cached
         else:
             logger.debug('Cache miss for resource %s (params=%s', resource, prms)
 
@@ -161,7 +175,7 @@ class APIConnection(object):
         key = (resource, frozenset(self._session.headers.items()), frozenset(prms.items()))
         expires = self._get_expires(res)
         if expires > 0:
-            self.cache.put(key, {'expires': time.time() + expires, 'payload': ret})
+            self.cache.put(key, ret, expires)
 
         return ret
 
