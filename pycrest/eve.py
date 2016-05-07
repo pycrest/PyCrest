@@ -210,7 +210,7 @@ class EVE(APIConnection):
             self._oauth_endpoint,
             quote(self.redirect_uri, safe=''),
             self.client_id,
-            "&scope=%s" % ' '.join(s) if scopes else '',
+            "&scope=%s" % '+'.join(s) if scopes else '',
             "&state=%s" % state if state else ''
         )
 
