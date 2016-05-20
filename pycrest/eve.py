@@ -107,7 +107,7 @@ class APIConnection(object):
             "Accept": "application/json",
         })
         session.headers.update(additional_headers)
-        session.mount('https://public-crest.eveonline.com',
+        session.mount('https://crest-tq.eveonline.com',
                 WeakCiphersAdapter())
         self._session = session
         self.cache_dir = cache_dir
@@ -182,7 +182,7 @@ class EVE(APIConnection):
             self._image_server = "https://image.testeveonline.com/"
             self._oauth_endpoint = "https://sisilogin.testeveonline.com/oauth"
         else:
-            self._public_endpoint = "https://public-crest.eveonline.com/"
+            self._public_endpoint = "https://crest-tq.eveonline.com/"
             self._authed_endpoint = "https://crest-tq.eveonline.com/"
             self._image_server = "https://image.eveonline.com/"
             self._oauth_endpoint = "https://login.eveonline.com/oauth"
