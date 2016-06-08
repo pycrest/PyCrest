@@ -98,17 +98,17 @@ def root_mock(url, request):
         "status_code": 200,
         "content": {
             "marketData": {
-                "href": "https://public-crest.eveonline.com/market/prices/",
+                "href": "https://crest-tq.eveonline.com/market/prices/",
             },
             "incursions": {
-                "href": "https://public-crest.eveonline.com/incursions/",
+                "href": "https://crest-tq.eveonline.com/incursions/",
             },
             "status": {"eve": "online"},
             "queryString": {
-                "href": "https://public-crest.eveonline.com/queryString/"
+                "href": "https://crest-tq.eveonline.com/queryString/"
             },
             "paginatedData": {
-                "href": "https://public-crest.eveonline.com/getPage/?page=2"
+                "href": "https://crest-tq.eveonline.com/getPage/?page=2"
             }
         },
         "headers": {
@@ -198,12 +198,12 @@ class TestApi(unittest.TestCase):
         mock_listdir.side_effect = fs.listdir
         mock_open.side_effect = fs.open
 
-        @httmock.urlmatch(scheme="https", netloc=r"^public-crest.eveonline.com$", path=r"^/queryString/?$")
+        @httmock.urlmatch(scheme="https", netloc=r"^crest-tq.eveonline.com$", path=r"^/queryString/?$")
         def test_qs(url, request):
             self.assertEqual(url.query, "query=string")
             return {"status_code": 200, "content": {}}
 
-        @httmock.urlmatch(scheme="https", netloc=r"^public-crest.eveonline.com$", path=r"^/getPage/?$")
+        @httmock.urlmatch(scheme="https", netloc=r"^crest-tq.eveonline.com$", path=r"^/getPage/?$")
         def test_pagination(url, request):
             self.assertEqual(url.query, "page=2")
             return {"status_code": 200, "content": {}}
@@ -217,7 +217,7 @@ class TestApi(unittest.TestCase):
             eve = pycrest.EVE()
             self.assertRaises(AttributeError, eve.__getattr__, 'marketData')
             eve()
-            self.assertEqual(eve().marketData.href, "https://public-crest.eveonline.com/market/prices/")
+            self.assertEqual(eve().marketData.href, "https://crest-tq.eveonline.com/market/prices/")
             self.assertEqual(eve.marketData().totalCount, 2)
             self.assertEqual(eve.marketData().items[0].avg_price, 100)
             self.assertEqual(eve.marketData().items[2][0], "foo")
@@ -251,7 +251,7 @@ class TestApi(unittest.TestCase):
 
 
             testing = pycrest.EVE(testing=True)
-            self.assertEqual(testing._public_endpoint, "http://public-crest-sisi.testeveonline.com/")
+            self.assertEqual(testing._public_endpoint, "http://api-sisi.testeveonline.com/")
 
     def test_headers(self):
         _self = self
@@ -369,7 +369,7 @@ class TestAuthorization(unittest.TestCase):
 
             self.assertRaises(AttributeError, con.__getattr__, 'marketData')
             con()
-            self.assertEqual(con.marketData.href, "https://public-crest.eveonline.com/market/prices/")
+            self.assertEqual(con.marketData.href, "https://crest-tq.eveonline.com/market/prices/")
             self.assertEqual(con.marketData().totalCount, 2)
             self.assertEqual(con.marketData().items[1].type.name, "Rifter")
 
@@ -392,7 +392,7 @@ class TestAuthorization(unittest.TestCase):
             con = eve.refr_authorize(con.refresh_token)
             self.assertRaises(AttributeError, con.__getattr__, 'marketData')
             con()
-            self.assertEqual(con.marketData.href, "https://public-crest.eveonline.com/market/prices/")
+            self.assertEqual(con.marketData.href, "https://crest-tq.eveonline.com/market/prices/")
             self.assertEqual(con.marketData().totalCount, 2)
             self.assertEqual(con.marketData().items[1].type.name, "Rifter")
 
@@ -405,7 +405,7 @@ class TestAuthorization(unittest.TestCase):
                                           con.refresh_token)
             self.assertRaises(AttributeError, con.__getattr__, 'marketData')
             con()
-            self.assertEqual(con.marketData.href, "https://public-crest.eveonline.com/market/prices/")
+            self.assertEqual(con.marketData.href, "https://crest-tq.eveonline.com/market/prices/")
             self.assertEqual(con.marketData().totalCount, 2)
             self.assertEqual(con.marketData().items[1].type.name, "Rifter")
 
