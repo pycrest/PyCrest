@@ -94,6 +94,23 @@ class DictCache(APICache):
         self._dict.pop(key, None)
 
 
+class MemcachedCache(APICache):
+    def __init__(self, serverList): #serverList could be ['127.0.0.1:11211']
+        #import memcache here so that the dependency on the python-memcached only occurs if you use it
+        import memcache
+        self._mc = memcache.Client(serverList, debug=0)
+
+    def get(self, key):
+        return self._mc.get(str(hash(key)))
+
+    def put(self, key, value):
+        self._mc.set(str(hash(key)), value)
+
+    def invalidate(self, key):
+        self._mc.delete(str(hash(key)))
+
+
+
 class APIConnection(object):
     def __init__(self, additional_headers=None, user_agent=None, cache_dir=None, cache=None):
         # Set up a Requests Session
