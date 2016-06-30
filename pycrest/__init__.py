@@ -8,6 +8,6 @@ class NullHandler(logging.Handler):
 logger = logging.getLogger('pycrest')
 logger.addHandler(NullHandler())
 
-version = "0.0.1"
+version = "0.0.5"
 
 from .eve import EVE
