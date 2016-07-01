@@ -94,6 +94,23 @@ class DictCache(APICache):
         self._dict.pop(key, None)
 
 
+class MemcachedCache(APICache):
+    def __init__(self, serverList): #serverList could be ['127.0.0.1:11211']
+        #import memcache here so that the dependency on the python-memcached only occurs if you use it
+        import memcache
+        self._mc = memcache.Client(serverList, debug=0)
+
+    def get(self, key):
+        return self._mc.get(str(hash(key)))
+
+    def put(self, key, value):
+        self._mc.set(str(hash(key)), value)
+
+    def invalidate(self, key):
+        self._mc.delete(str(hash(key)))
+
+
+
 class APIConnection(object):
     def __init__(self, additional_headers=None, user_agent=None, cache_dir=None, cache=None):
         # Set up a Requests Session
@@ -107,7 +124,7 @@ class APIConnection(object):
             "Accept": "application/json",
         })
         session.headers.update(additional_headers)
-        session.mount('https://public-crest.eveonline.com',
+        session.mount('https://crest-tq.eveonline.com',
                 WeakCiphersAdapter())
         self._session = session
         if cache:
@@ -182,12 +199,12 @@ class EVE(APIConnection):
         self.client_id = kwargs.pop('client_id', None)
         self.redirect_uri = kwargs.pop('redirect_uri', None)
         if kwargs.pop('testing', False):
-            self._public_endpoint = "http://public-crest-sisi.testeveonline.com/"
+            self._public_endpoint = "http://api-sisi.testeveonline.com/"
             self._authed_endpoint = "https://api-sisi.testeveonline.com/"
             self._image_server = "https://image.testeveonline.com/"
             self._oauth_endpoint = "https://sisilogin.testeveonline.com/oauth"
         else:
-            self._public_endpoint = "https://public-crest.eveonline.com/"
+            self._public_endpoint = "https://crest-tq.eveonline.com/"
             self._authed_endpoint = "https://crest-tq.eveonline.com/"
             self._image_server = "https://image.eveonline.com/"
             self._oauth_endpoint = "https://login.eveonline.com/oauth"
