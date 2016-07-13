@@ -170,7 +170,8 @@ class APIConnection(object):
         logger.debug('Getting resource %s (params=%s)', resource, prms)
         res = self._session.get(resource, params=prms)
         if res.status_code != 200:
-            raise APIException("Got unexpected status code from server: %i" % res.status_code)
+            raise APIException("Got unexpected status code from server: %i" % res.status_code,
+                               status_code=res.status_code)
 
         ret = res.json()
 
@@ -236,7 +237,8 @@ class EVE(APIConnection):
         headers = {"Authorization": "Basic %s" % auth}
         res = self._session.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
         if res.status_code != 200:
-            raise APIException("Got unexpected status code from API: %i" % res.status_code)
+            raise APIException("Got unexpected status code from API: %i" % res.status_code,
+                               status_code=res.status_code)
         return res.json()
 
     def authorize(self, code):

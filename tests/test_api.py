@@ -224,6 +224,11 @@ class TestApi(unittest.TestCase):
             self.assertEqual(eve.marketData().items[3], "baz")
             self.assertEqual(eve().status().eve, "online")
             self.assertRaises(APIException, lambda: eve.incursions())  # Scala's notation would be nice
+            # Test the APIException status code attribute
+            try:
+                eve.incursions()
+            except APIException as e:
+                self.assertEqual(e.status_code, 404)
             # cache miss
             eve = pycrest.EVE(cache_dir='/cachedir')
             eve()
