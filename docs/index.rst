@@ -40,8 +40,8 @@ Resources for the CREST data are mapped as attributes on the EVE class, allowing
 
 .. highlight:: python
 
->>> eve.motd
-{u'dust': {u'href': u'http://newsfeed.eveonline.com/articles/71'}, ...}
+>>> eve.incursions
+{u'href': u'https://crest-tq.eveonline.com/incursions/'}
 
 .. highlight:: none
 
@@ -51,7 +51,7 @@ desired resource:
 .. highlight:: python
 
 >>> eve.incursions
-{u'href': u'https://public-crest.eveonline.com/incursions/'}
+{u'href': u'https://crest-tq.eveonline.com/incursions/'}
 >>> eve.incursions()
 {u'items': [{...}], u'totalCount_str': u'5', u'totalCount': 5, u'pageCount': 1, u'pageCount_str': u'1'}
 >>> eve.incursions().totalCount

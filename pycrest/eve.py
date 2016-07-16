@@ -206,7 +206,7 @@ class EVE(APIConnection):
         else:
             self._public_endpoint = "https://crest-tq.eveonline.com/"
             self._authed_endpoint = "https://crest-tq.eveonline.com/"
-            self._image_server = "https://image.eveonline.com/"
+            self._image_server = "https://imageserver.eveonline.com/"
             self._oauth_endpoint = "https://login.eveonline.com/oauth"
         self._endpoint = self._public_endpoint
         self._cache = {}
