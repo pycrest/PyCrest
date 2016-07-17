@@ -42,11 +42,12 @@ class APICache(object):
         raise NotImplementedError
 
     def _hash(self, data):
-      h = hashlib.new('md5')
-      h.update(pickle.dumps(data))
-      #prefix allows possibility of multiple applications 
-      #sharing same keyspace
-      return 'pyc_' + h.hexdigest()
+        h = hashlib.new('md5')
+        h.update(pickle.dumps(data))
+        #prefix allows possibility of multiple applications 
+        #sharing same keyspace
+        return 'pyc_' + h.hexdigest()
+
 
 class FileCache(APICache):
     def __init__(self, path):
