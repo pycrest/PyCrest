@@ -3,6 +3,8 @@ import base64
 import requests
 import time
 import zlib
+import hashlib
+import pickle
 from pycrest import version
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException
@@ -39,6 +41,13 @@ class APICache(object):
     def invalidate(self, key):
         raise NotImplementedError
 
+    def _hash(self, data):
+        h = hashlib.new('md5')
+        h.update(pickle.dumps(data))
+        #prefix allows possibility of multiple applications 
+        #sharing same keyspace
+        return 'pyc_' + h.hexdigest()
+
 
 class FileCache(APICache):
     def __init__(self, path):
@@ -48,7 +57,7 @@ class FileCache(APICache):
             os.mkdir(self.path, 0o700)
 
     def _getpath(self, key):
-        return os.path.join(self.path, str(hash(key)) + '.cache')
+        return os.path.join(self.path, self._hash(key) + '.cache')
 
     def put(self, key, value):
         with open(self._getpath(key), 'wb') as f:
@@ -101,13 +110,13 @@ class MemcachedCache(APICache):
         self._mc = memcache.Client(serverList, debug=0)
 
     def get(self, key):
-        return self._mc.get(str(hash(key)))
+        return self._mc.get(self._hash(key))
 
     def put(self, key, value):
-        self._mc.set(str(hash(key)), value)
+        return self._mc.set(self._hash(key), value)
 
     def invalidate(self, key):
-        self._mc.delete(str(hash(key)))
+        return self._mc.delete(self._hash(key))
 
 
 
