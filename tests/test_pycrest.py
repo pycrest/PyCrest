@@ -45,6 +45,9 @@ def root_mock(url, request):
     "paginatedData": {
         "href": "https://crest-tq.eveonline.com/getPage/?page=2"
     },
+    "writeableEndpoint": {
+        "href": "https://crest-tq.eveonline.com/writeableMadeUp/"
+    },
     "list": [
         "item1",
         {
@@ -97,11 +100,22 @@ def market_prices_mock(url, request):
         content='{"totalCount_str": "10213", "items": [], "pageCount": 1, "pa'
         'geCount_str": "1", "totalCount": 10213}')
 
+@httmock.urlmatch(
+    scheme="https",
+    netloc=r"(api-sisi\.test)?(crest-tq\.)?eveonline\.com$",
+    path=r"^/writeableMadeUp/?$")
+def writeable_endpoint_mock(url, request):
+    return httmock.response(
+        status_code=200,
+        content='{}')
+
+
 all_httmocks = [
     root_mock,
     mock_login,
     verify_mock,
     market_prices_mock,
+    writeable_endpoint_mock,
     fallback_mock]
 
 
@@ -564,6 +578,87 @@ class TestAPIObject(unittest.TestCase):
         with httmock.HTTMock(*all_httmocks):
             res = self.api().marketData()
         self.assertTrue(isinstance(res, APIObject))
+
+    def test_call_post(self):
+        with httmock.HTTMock(*all_httmocks):
+            res = self.api().writeableEndpoint(method='post')
+        self.assertTrue(isinstance(res, APIObject))
+
+    def test_call_put(self):
+        with httmock.HTTMock(*all_httmocks):
+            res = self.api().writeableEndpoint(method='put')
+        self.assertTrue(isinstance(res, APIObject))
+
+    def test_call_delete(self):
+        with httmock.HTTMock(*all_httmocks):
+            res = self.api().writeableEndpoint(method='delete')
+        self.assertTrue(isinstance(res, APIObject))
+
+    def test_non_http_200_201_post(self):
+
+        @httmock.all_requests
+        def non_http_200(url, request):
+            return {'status_code': 404}
+
+        with httmock.HTTMock(non_http_200):
+            self.assertRaises(APIException, self.api.writeableEndpoint, method='post')
+
+    def test_non_http_200_put(self):
+
+        @httmock.all_requests
+        def non_http_200(url, request):
+            return {'status_code': 201}
+
+        with httmock.HTTMock(non_http_200):
+            self.assertRaises(APIException, self.api.writeableEndpoint, method='put')
+
+    def test_non_http_200_delete(self):
+
+        @httmock.all_requests
+        def non_http_200(url, request):
+            return {'status_code': 201}
+
+        with httmock.HTTMock(non_http_200):
+            self.assertRaises(APIException, self.api.writeableEndpoint, method='delete')
+
+    #201 received from successful contact creation via POST
+    def test_http_201_post(self):
+        @httmock.all_requests
+        def http_201(url, request):
+            return {'status_code': 201}
+
+        with httmock.HTTMock(http_201):
+            res = self.api.writeableEndpoint(method='post')
+        self.assertTrue(isinstance(res, APIObject))
+
+
+    def test_double_call_self(self):
+        with httmock.HTTMock(*all_httmocks):
+            r1 = self.api()
+            r2 = r1()
+        self.assertEqual(r1, r2)
+
+    def test_deprecated_parameter_passing(self):
+        with httmock.HTTMock(*all_httmocks):
+            res = self.api.writeableEndpoint(arg1='val1', arg2='val2')
+
+        self.assertTrue(isinstance(res, APIObject))
+
+    def test_string_parameter_passing(self):
+        with httmock.HTTMock(*all_httmocks):
+            res = self.api.writeableEndpoint(method='post', data='some (json?) data')
+
+        self.assertTrue(isinstance(res, APIObject))
+
+    def test_dict_parameter_passing(self):
+        with httmock.HTTMock(*all_httmocks):
+          res = self.api.writeableEndpoint(data={'arg1' : 'val1' })
+
+        self.assertTrue(isinstance(res, APIObject))
+
+    def test_unhandled_http_method_exception(self):
+        with httmock.HTTMock(*all_httmocks):
+            self.assertRaises(APIException, self.api.writeableEndpoint, method='snip') #made-up http method
 
 if __name__ == "__main__":
     unittest.main()
