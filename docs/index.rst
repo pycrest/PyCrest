@@ -101,7 +101,7 @@ Authorized Connections
 
 PyCrest can also be used for accessing CREST resources that require an authorized connection.  To do so you must
 provide the EVE class with a `client_id`, `api_key`, and `redirect_uri` for the OAuth flows for authorizing a client.
-Once done, PyCrest can be used for obtaining an authorization token:
+Once done, PyCrest can be used for obtaining an authorization token (short-lived) and a refresh token (long-lived):
 
 .. highlight:: python
 
@@ -112,7 +112,7 @@ Once done, PyCrest can be used for obtaining an authorization token:
 .. highlight:: none
 
 Once you have redirected the client to acquire authorization, you may pass the returned code to `EVE.authorize()` to
-create an authorized connection.
+create an authorized connection. The code is returned as a parameter of the callback URI that you specified when you registered your application with CCP. For example, if your callback URI is 'https://callback.example.com/callback/' then the code would be returned by redirecting to something like 'https://callback.example.com/callback/?code=a1b2c3djsdfklsdfjklfsdjflk'.
 
 .. highlight:: python
 
@@ -143,3 +143,20 @@ in-place and also returns `self` for backward compatibility.
 <pycrest.eve.AuthedConnection object at 0x0251F490>
 
 .. highlight:: none
+
+Refresh Tokens
+--------------
+
+Once the authorization token has expired (perhaps after you restart the application), you can obtain a new authorization token either by having the user go through the log-in process again or by using the long-lived refresh token to get a new authorization token without involving the user. The OAuth2 refresh token is stored inside the AuthedConnection object you obtained earlier, so you should persist this token somewhere safe for later use. Note that the refresh_token should be stored securely, as it allows anyone who possesses it access to whichever scopes you authorized. To get a new authorization token from the refresh token, pass the refresh token to refr_authorize(), and you have an AuthedConnection object ready to access CREST.
+
+.. highlight:: python
+
+>>> con = eve.authorize(returnedCode)
+>>> con
+<pycrest.eve.AuthedConnection object at 0x7f06dd61e410>
+>>> con.refresh_token
+u'djsdfjklsdf9sd8f908sdf9sd9f8sd9f8sdf8sp9fd89psdf89spdf89spdf89spdf89p'
+
+
+>>> eve.refr_authorize(refresh_token)
+<pycrest.eve.AuthedConnection object at 0x7f06e21f48d0>
