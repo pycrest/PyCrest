@@ -143,3 +143,12 @@ in-place and also returns `self` for backward compatibility.
 <pycrest.eve.AuthedConnection object at 0x0251F490>
 
 .. highlight:: none
+
+To resume a authorized API connection without putting the user through the SSO authentification proces you can save the `con.refresh_token` somewhere and call `eve.refr_authorize()` while the refresh_token is valid.
+
+.. highlight:: python
+
+>>> con = eve.refr_authorize(refresh_token)
+<pycrest.eve.AuthedConnection object at 0x0251F490>
+
+.. highlight:: none
