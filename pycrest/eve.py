@@ -227,6 +227,33 @@ class APIConnection(object):
 
         return ret
 
+    #post is not idempotent so there should be no caching
+    def post(self, resource, data={}):
+        logger.debug('Posting resource %s (data=%s)', resource, data)
+        res = self._session.post(resource, data=data)
+        if res.status_code not in [200, 201]:
+            raise APIException("Got unexpected status code from server: %i" % res.status_code)
+
+        return {}
+
+    #put is not idempotent so there should be no caching
+    def put(self, resource, data={}):
+        logger.debug('Putting resource %s (data=%s)', resource, data)
+        res = self._session.put(resource, data=data)
+        if res.status_code != 200:
+            raise APIException("Got unexpected status code from server: %i" % res.status_code)
+
+        return {}
+
+    #delete is not idempotent so there should be no caching
+    def delete(self, resource):
+        logger.debug('Deleting resource %s', resource)
+        res = self._session.delete(resource)
+        if res.status_code != 200:
+            raise APIException("Got unexpected status code from server: %i" % res.status_code)
+
+        return {}
+
     def _get_expires(self, response):
         if 'Cache-Control' not in response.headers:
             return 0
@@ -379,7 +406,6 @@ class AuthedConnection(EVE):
             self.refresh()
         return super(self.__class__, self).get(resource, params)
 
-
 class APIObject(object):
 
     def __init__(self, parent, connection):
@@ -409,16 +435,47 @@ class APIObject(object):
             return self._dict[item]
         raise AttributeError(item)
 
+
+
     def __call__(self, **kwargs):
+        """carries out a CREST request
+
+        __call__ takes two keyword parameters: method and data
+
+        method contains the http request method and defaults to 'get'
+            but could also be 'post', 'put', or 'delete'
+
+        data contains any arguments that will be passed with the request -
+            it could be a dictionary which contains parameters
+            and is passed via the url for 'get' requests and as form-encoded
+            data for 'post' or 'put' requests. It could also be a string if 
+            another format of data (e.g. via json.dumps()) must be passed in 
+            a 'post' or 'put' request. This parameter has no effect on
+            'delete' requests.
+        """
+
         # Caching is now handled by APIConnection
         if 'href' in self._dict:
-            return APIObject(
-                self.connection.get(
-                    self._dict['href'].encode(),
-                    params=kwargs),
-                self.connection)
-        else:  # pragma: no cover
-            # This should never happen, right?
+            method = kwargs.pop('method', 'get')#default to get: historic behaviour
+            data = kwargs.pop('data', {})
+
+            #retain compatibility with historic method of passing parameters.
+            #Slightly unsatisfactory - what if data is dict-like but not a dict?
+            if isinstance(data, dict):
+                for arg in kwargs: 
+                    data[arg] = kwargs[arg]
+
+            if method == 'post':
+                return APIObject(self.connection.post(self._dict['href'], data=data), self.connection)
+            elif method == 'put':
+                return APIObject(self.connection.put(self._dict['href'], data=data), self.connection)
+            elif method == 'delete':
+                return APIObject(self.connection.delete(self._dict['href'] ), self.connection)
+            elif method == 'get': 
+                return APIObject(self.connection.get(self._dict['href'], params=data), self.connection)
+            else:
+                raise APIException( "unhandled HTTP method: %s" % method)
+        else:
             return self
 
     def __str__(self):  # pragma: no cover
