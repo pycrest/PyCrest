@@ -10,7 +10,7 @@ import httmock
 import pycrest
 import mock
 import errno
-from pycrest.errors import APIException
+from pycrest.errors import APIException, UnsupportedHTTPMethodException
 from requests.models import PreparedRequest
 import unittest
 
@@ -86,8 +86,9 @@ def fallback_mock(url, request):
 def mock_login(url, request):
     return httmock.response(
         status_code=200,
-        content='{"access_token": "access_token", "refresh_token": "r'
-        'efresh_token", "expires_in": 300}')
+        content='{"access_token": "access_token",'
+                ' "refresh_token": "refresh_token",'
+                ' "expires_in": 300}')
 
 
 @httmock.urlmatch(
@@ -97,8 +98,11 @@ def mock_login(url, request):
 def market_prices_mock(url, request):
     return httmock.response(
         status_code=200,
-        content='{"totalCount_str": "10213", "items": [], "pageCount": 1, "pa'
-        'geCount_str": "1", "totalCount": 10213}')
+        content='{"totalCount_str": "10213",'
+                ' "items": [],'
+                ' "pageCount": 1,'
+                ' "pageCount_str": "1",'
+                ' "totalCount": 10213}')
 
 @httmock.urlmatch(
     scheme="https",
@@ -167,7 +171,8 @@ class TestEVE(unittest.TestCase):
 
         @httmock.all_requests
         def mock_login(url, request):
-            return httmock.response(status_code=204)
+            return httmock.response(status_code=204,
+                                    content='{}')
 
         with httmock.HTTMock(mock_login):
             self.assertRaises(APIException, self.api.authorize, code='code')
@@ -362,7 +367,7 @@ class TestAPIConnection(unittest.TestCase):
 
         @httmock.all_requests
         def non_http_200(url, request):
-            return {'status_code': 404}
+            return {'status_code': 404, 'content' : {'message' : 'not found'}}
 
         with httmock.HTTMock(non_http_200):
             self.assertRaises(APIException, self.api)
@@ -598,7 +603,7 @@ class TestAPIObject(unittest.TestCase):
 
         @httmock.all_requests
         def non_http_200(url, request):
-            return {'status_code': 404}
+          return {'status_code': 404, 'content' : {'message' : 'not found'}}
 
         with httmock.HTTMock(non_http_200):
             self.assertRaises(APIException, self.api.writeableEndpoint, method='post')
@@ -607,7 +612,7 @@ class TestAPIObject(unittest.TestCase):
 
         @httmock.all_requests
         def non_http_200(url, request):
-            return {'status_code': 201}
+            return {'status_code': 201, 'content' : {'message' : 'created new object'}}
 
         with httmock.HTTMock(non_http_200):
             self.assertRaises(APIException, self.api.writeableEndpoint, method='put')
@@ -616,7 +621,7 @@ class TestAPIObject(unittest.TestCase):
 
         @httmock.all_requests
         def non_http_200(url, request):
-            return {'status_code': 201}
+            return {'status_code': 201, 'content' : {'message' : 'created new object'}}
 
         with httmock.HTTMock(non_http_200):
             self.assertRaises(APIException, self.api.writeableEndpoint, method='delete')
@@ -625,7 +630,7 @@ class TestAPIObject(unittest.TestCase):
     def test_http_201_post(self):
         @httmock.all_requests
         def http_201(url, request):
-            return {'status_code': 201}
+            return {'status_code': 201, 'content' : {'message' : 'created new object'}}
 
         with httmock.HTTMock(http_201):
             res = self.api.writeableEndpoint(method='post')
@@ -658,7 +663,7 @@ class TestAPIObject(unittest.TestCase):
 
     def test_unhandled_http_method_exception(self):
         with httmock.HTTMock(*all_httmocks):
-            self.assertRaises(APIException, self.api.writeableEndpoint, method='snip') #made-up http method
+            self.assertRaises(UnsupportedHTTPMethodException, self.api.writeableEndpoint, method='snip') #made-up http method
 
 if __name__ == "__main__":
     unittest.main()

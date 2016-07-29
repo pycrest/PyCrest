@@ -7,7 +7,7 @@ import hashlib
 import pickle
 from pycrest import version
 from pycrest.compat import bytes_, text_
-from pycrest.errors import APIException
+from pycrest.errors import APIException, UnsupportedHTTPMethodException
 
 try:
     from urllib.parse import urlparse, urlunparse, parse_qsl
@@ -207,10 +207,14 @@ class APIConnection(object):
 
         logger.debug('Getting resource %s (params=%s)', resource, prms)
         res = self._session.get(resource, params=prms)
+        
         if res.status_code != 200:
             raise APIException(
-                "Got unexpected status code from server: %i" %
-                res.status_code)
+                resource,
+                res.status_code,
+                res.json()
+                )
+                
 
         ret = res.json()
 
@@ -232,7 +236,11 @@ class APIConnection(object):
         logger.debug('Posting resource %s (data=%s)', resource, data)
         res = self._session.post(resource, data=data)
         if res.status_code not in [200, 201]:
-            raise APIException("Got unexpected status code from server: %i" % res.status_code)
+            raise APIException(
+                resource,
+                res.status_code,
+                res.json()
+                )
 
         return {}
 
@@ -241,7 +249,11 @@ class APIConnection(object):
         logger.debug('Putting resource %s (data=%s)', resource, data)
         res = self._session.put(resource, data=data)
         if res.status_code != 200:
-            raise APIException("Got unexpected status code from server: %i" % res.status_code)
+            raise APIException(
+                resource,
+                res.status_code,
+                res.json()
+                )
 
         return {}
 
@@ -250,7 +262,11 @@ class APIConnection(object):
         logger.debug('Deleting resource %s', resource)
         res = self._session.delete(resource)
         if res.status_code != 200:
-            raise APIException("Got unexpected status code from server: %i" % res.status_code)
+            raise APIException(
+                resource,
+                res.status_code,
+                res.json()
+                )
 
         return {}
 
@@ -309,15 +325,18 @@ class EVE(APIConnection):
                     "%s:%s" %
                     (self.client_id, self.api_key))))
         headers = {"Authorization": "Basic %s" % auth}
+        resource = "%s/token" % self._oauth_endpoint
         res = self._session.post(
-            "%s/token" %
-            self._oauth_endpoint,
+            resource,
             params=params,
             headers=headers)
         if res.status_code != 200:
             raise APIException(
-                "Got unexpected status code from API: %i" %
-                res.status_code)
+                        resource,
+                        res.status_code,
+                        res.json()
+                        )
+
         return res.json()
 
     def authorize(self, code):
@@ -474,7 +493,7 @@ class APIObject(object):
             elif method == 'get': 
                 return APIObject(self.connection.get(self._dict['href'], params=data), self.connection)
             else:
-                raise APIException( "unhandled HTTP method: %s" % method)
+                raise UnsupportedHTTPMethodException(method)
         else:
             return self
 
