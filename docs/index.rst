@@ -128,8 +128,13 @@ on an authorized connection:
 .. highlight:: python
 
 >>> con = eve.authorize(code)
->>> con.whoami()
-{u'Scopes': u'publicData', u'CharacterName': u'Dreae', ...}
+>>> user = con.whoami()
+>>> user
+{'Scopes': 'publicData', 'CharacterName': 'Dreae', ...}
+>>> user['Scopes']
+'publicData '
+>>> user['CharacterName']
+'Dreae'
 
 .. highlight:: none
 

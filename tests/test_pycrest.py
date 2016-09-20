@@ -5,7 +5,7 @@ Created on Jun 27, 2016
 '''
 import sys
 from pycrest.eve import EVE, DictCache, APICache, FileCache, APIObject,\
-    MemcachedCache
+    MemcachedCache, APIResponse
 import httmock
 import pycrest
 import mock
@@ -13,6 +13,7 @@ import errno
 from pycrest.errors import APIException, UnsupportedHTTPMethodException
 from requests.models import PreparedRequest
 import unittest
+import json
 
 try:
     import __builtin__
@@ -21,15 +22,7 @@ except ImportError:
     import builtins
     builtins_name = builtins.__name__
 
-
-@httmock.urlmatch(
-    scheme="https",
-    netloc=r"(api-sisi\.test)?(crest-tq\.)?eveonline\.com$",
-    path=r"^/?$")
-def root_mock(url, request):
-    return httmock.response(
-        status_code=200,
-        content='''{
+ROOT_CONTENT = '''{
     "marketData": {
         "href": "https://crest-tq.eveonline.com/market/prices/"
     },
@@ -57,18 +50,28 @@ def root_mock(url, request):
             "item3"
         ]
     ]
-}''', headers={"Cache-Control": "private, max-age=300"})
+}'''
 
+@httmock.urlmatch(
+    scheme="https",
+    netloc=r"(api-sisi\.test)?(crest-tq\.)?eveonline\.com$",
+    path=r"^/?$")
+def root_mock(url, request):
+    return httmock.response(
+        status_code=200,
+        content=ROOT_CONTENT, headers={"Cache-Control": "private, max-age=300",
+               "Content-Type": "application/vnd.ccp.eve.Api-v5+json; charset=utf-8"})
 
 @httmock.urlmatch(
     scheme="https",
     netloc=r"(sisilogin\.test)?(login\.)?eveonline\.com$",
     path=r"^/oauth/verify/?$")
 def verify_mock(url, request):
-    return {
-        "status_code": 200,
-        "content": {"CharacterName": "Foobar"},
-    }
+    return httmock.response(
+        status_code=200,
+        content='''{"CharacterName": "Foobar"}''',
+        headers={"Content-Type": "application/vnd.ccp.eve.Api-v5+json; charset=utf-8"})
+
 
 
 @httmock.all_requests
@@ -213,6 +216,47 @@ class TestAuthedConnection(unittest.TestCase):
         self.authed.expires = 0
         with httmock.HTTMock(*all_httmocks):
             self.authed()
+
+
+class TestAPIResponse(unittest.TestCase):
+
+    def setUp(self):
+        eve = EVE()
+        with httmock.HTTMock(*all_httmocks):
+            self.root = eve()
+
+#     def test_content(self):
+#         res = self.root()
+#         self.assertEqual(res, ROOT_CONTENT)
+
+    def test_get_expires(self):
+        # No header at all
+        r = httmock.response(200, '{}'.encode('utf-8'))
+        self.assertEqual(self.root._response._get_expires(r.headers), 0)
+
+        # Cache-Control header with no-cache
+        r = httmock.response(status_code=200,
+                             content='{}'.encode('utf-8'),
+                             headers={'Cache-Control': 'no-cache'})
+        self.assertEqual(self.root._response._get_expires(r.headers), 0)
+
+        # Cache-Control header with no-store
+        r = httmock.response(status_code=200,
+                             content='{}'.encode('utf-8'),
+                             headers={'Cache-Control': 'no-store'})
+        self.assertEqual(self.root._response._get_expires(r.headers), 0)
+
+        # Cache-Control header with wrong content
+        r = httmock.response(status_code=200,
+                             content='{}'.encode('utf-8'),
+                             headers={'Cache-Control': 'no-way'})
+        self.assertEqual(self.root._response._get_expires(r.headers), 0)
+
+        # Cache-Control header with max-age=300
+        r = httmock.response(status_code=200,
+                             content='{}'.encode('utf-8'),
+                             headers={'Cache-Control': 'max-age=300'})
+        self.assertEqual(self.root._response._get_expires(r.headers), 300)
 
 
 class TestAPIConnection(unittest.TestCase):
@@ -371,35 +415,6 @@ class TestAPIConnection(unittest.TestCase):
 
         with httmock.HTTMock(non_http_200):
             self.assertRaises(APIException, self.api)
-
-    def test_get_expires(self):
-        # No header at all
-        r = httmock.response(200, '{}'.encode('utf-8'))
-        self.assertEqual(self.api._get_expires(r), 0)
-
-        # Cache-Control header with no-cache
-        r = httmock.response(status_code=200,
-                             content='{}'.encode('utf-8'),
-                             headers={'Cache-Control': 'no-cache'})
-        self.assertEqual(self.api._get_expires(r), 0)
-
-        # Cache-Control header with no-store
-        r = httmock.response(status_code=200,
-                             content='{}'.encode('utf-8'),
-                             headers={'Cache-Control': 'no-store'})
-        self.assertEqual(self.api._get_expires(r), 0)
-
-        # Cache-Control header with wrong content
-        r = httmock.response(status_code=200,
-                             content='{}'.encode('utf-8'),
-                             headers={'Cache-Control': 'no-way'})
-        self.assertEqual(self.api._get_expires(r), 0)
-
-        # Cache-Control header with max-age=300
-        r = httmock.response(status_code=200,
-                             content='{}'.encode('utf-8'),
-                             headers={'Cache-Control': 'max-age=300'})
-        self.assertEqual(self.api._get_expires(r), 300)
 
     def test_session_mock(self):
         # Check default header
@@ -568,11 +583,20 @@ class TestAPIObject(unittest.TestCase):
         self.assertEqual(res[0], 'item1')
 
     def test_getattr_exception(self):
-        self.assertRaises(
-            AttributeError,
-            getattr,
-            self.api,
-            "invalid_property")
+        with self.assertRaises(AttributeError):
+            self.api()['404-not-found']
+
+    def test_getitem_status_code(self):
+        with httmock.HTTMock(*all_httmocks):
+            self.assertEqual(self.api()['status_code'], 200)
+
+    def test_getitem_expires_in(self):
+        with httmock.HTTMock(*all_httmocks):
+            self.assertEqual(self.api()['expires_in'], 300)
+
+    def test_getitem_version(self):
+        with httmock.HTTMock(*all_httmocks):
+            self.assertEqual(self.api()['version'], 'application/vnd.ccp.eve.Api-v5')
 
     def test_call(self):
         with httmock.HTTMock(*all_httmocks):

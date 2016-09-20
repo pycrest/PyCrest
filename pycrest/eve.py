@@ -28,6 +28,7 @@ import re
 
 logger = logging.getLogger("pycrest.eve")
 cache_re = re.compile(r'max-age=([0-9]+)')
+endpoint_version_re = re.compile(r'^(application\/vnd\.ccp\.eve\.[a-zA-Z]+-v[0-9]+)\+')
 
 
 class APICache(object):
@@ -127,6 +128,67 @@ class MemcachedCache(APICache):
         return self._mc.delete(self._hash(key))
 
 
+class APIResponse(object):
+
+    def __init__(self, response):
+        '''
+
+        :param response: requests.Response object
+        '''
+        assert isinstance(response, requests.Response)
+
+        self._response = response
+        self.cached_at = time.time()
+
+    def __getitem__(self, item):
+        if hasattr(self, item):
+            return self.__getattribute__(item)
+        raise AttributeError(item)
+
+    @property
+    def content(self):
+        return self._response.json()
+
+    @property
+    def status_code(self):
+        return self._response.status_code
+
+    @property
+    def expires_at(self):
+        return self.cached_at + self.expires_in
+
+    @property
+    def expires_in(self):
+        return self._get_expires(self.headers)
+
+    @property
+    def headers(self):
+        return self._response.headers
+
+    @property
+    def version(self):
+        return self._parse_endpoint_version(self.headers)
+
+    def _parse_endpoint_version(self, headers):
+        if 'content-type' not in headers:
+            return None
+        match = endpoint_version_re.search(headers['Content-Type'])
+        if match:
+            return match.group(1)
+        return None
+
+    def _get_expires(self, headers):
+        if 'Cache-Control' not in headers:
+            return 0
+        if any([s in headers['Cache-Control']
+                for s in ['no-cache', 'no-store']]):
+            return 0
+        match = cache_re.search(headers['Cache-Control'])
+        if match:
+            return int(match.group(1))
+        return 0
+
+
 class APIConnection(object):
 
     def __init__(
@@ -189,7 +251,7 @@ class APIConnection(object):
                 self._session.headers.items()), frozenset(
                 prms.items()))
         cached = self.cache.get(key)
-        if cached and cached['expires'] > time.time():
+        if cached and cached['expires_at'] > time.time():
             logger.debug(
                 'Cache hit for resource %s (params=%s)',
                 resource,
@@ -216,20 +278,20 @@ class APIConnection(object):
                 )
                 
 
-        ret = res.json()
-
         # cache result
         key = (
             resource, frozenset(
                 self._session.headers.items()), frozenset(
                 prms.items()))
-        expires = self._get_expires(res)
-        if expires > 0:
+
+        response = APIResponse(res)
+
+        if response.expires_in > 0:
             self.cache.put(
                 key, {
-                    'expires': time.time() + expires, 'payload': ret})
+                    'expires_at': response.expires_at, 'payload': response})
 
-        return ret
+        return response
 
     #post is not idempotent so there should be no caching
     def post(self, resource, data={}):
@@ -241,7 +303,6 @@ class APIConnection(object):
                 res.status_code,
                 res.json()
                 )
-
         return {}
 
     #put is not idempotent so there should be no caching
@@ -254,7 +315,6 @@ class APIConnection(object):
                 res.status_code,
                 res.json()
                 )
-
         return {}
 
     #delete is not idempotent so there should be no caching
@@ -267,19 +327,7 @@ class APIConnection(object):
                 res.status_code,
                 res.json()
                 )
-
         return {}
-
-    def _get_expires(self, response):
-        if 'Cache-Control' not in response.headers:
-            return 0
-        if any([s in response.headers['Cache-Control']
-                for s in ['no-cache', 'no-store']]):
-            return 0
-        match = cache_re.search(response.headers['Cache-Control'])
-        if match:
-            return int(match.group(1))
-        return 0
 
 
 class EVE(APIConnection):
@@ -404,10 +452,8 @@ class AuthedConnection(EVE):
 
     def whoami(self):
         if 'whoami' not in self._cache:
-            self._cache['whoami'] = self.get(
-                "%s/verify" %
-                self._oauth_endpoint)
-        return self._cache['whoami']
+            self._cache['whoami'] = self.get("%s/verify" % self._oauth_endpoint)
+        return self._cache['whoami']['content']
 
     def refresh(self):
         res = self._authorize(
@@ -425,12 +471,20 @@ class AuthedConnection(EVE):
             self.refresh()
         return super(self.__class__, self).get(resource, params)
 
+
 class APIObject(object):
 
     def __init__(self, parent, connection):
         self._dict = {}
+        self._response = {}
+        if isinstance(parent, APIResponse):
+            content = parent.content
+            self._response = parent
+        else:
+            content = parent
+
         self.connection = connection
-        for k, v in parent.items():
+        for k, v in content.items():
             if isinstance(v, dict):
                 self._dict[k] = APIObject(v, connection)
             elif isinstance(v, list):
@@ -450,11 +504,20 @@ class APIObject(object):
         return new
 
     def __getattr__(self, item):
+        '''Returns CREST property
+
+        When calling `x().name` return `self._dict['name']` if present
+        '''
         if item in self._dict:
             return self._dict[item]
         raise AttributeError(item)
 
+    def __getitem__(self, item):
+        '''Returns Response property
 
+        When calling `x()['name']` return `self._response['name']` if present
+        '''
+        return self._response.__getitem__(item)
 
     def __call__(self, **kwargs):
         """carries out a CREST request
@@ -467,31 +530,48 @@ class APIObject(object):
         data contains any arguments that will be passed with the request -
             it could be a dictionary which contains parameters
             and is passed via the url for 'get' requests and as form-encoded
-            data for 'post' or 'put' requests. It could also be a string if 
-            another format of data (e.g. via json.dumps()) must be passed in 
+            data for 'post' or 'put' requests. It could also be a string if
+            another format of data (e.g. via json.dumps()) must be passed in
             a 'post' or 'put' request. This parameter has no effect on
             'delete' requests.
         """
 
         # Caching is now handled by APIConnection
         if 'href' in self._dict:
-            method = kwargs.pop('method', 'get')#default to get: historic behaviour
+            # default to get: historic behaviour
+            method = kwargs.pop('method', 'get')
             data = kwargs.pop('data', {})
 
-            #retain compatibility with historic method of passing parameters.
-            #Slightly unsatisfactory - what if data is dict-like but not a dict?
+            # retain compatibility with historic method of passing parameters.
+            # Slightly unsatisfactory - what if data is dict-like but not a
+            # dict?
             if isinstance(data, dict):
-                for arg in kwargs: 
+                for arg in kwargs:
                     data[arg] = kwargs[arg]
 
             if method == 'post':
-                return APIObject(self.connection.post(self._dict['href'], data=data), self.connection)
+                return APIObject(
+                    self.connection.post(
+                        self._dict['href'],
+                        data=data),
+                    self.connection)
             elif method == 'put':
-                return APIObject(self.connection.put(self._dict['href'], data=data), self.connection)
+                return APIObject(
+                    self.connection.put(
+                        self._dict['href'],
+                        data=data),
+                    self.connection)
             elif method == 'delete':
-                return APIObject(self.connection.delete(self._dict['href'] ), self.connection)
-            elif method == 'get': 
-                return APIObject(self.connection.get(self._dict['href'], params=data), self.connection)
+                return APIObject(
+                    self.connection.delete(
+                        self._dict['href']),
+                    self.connection)
+            elif method == 'get':
+                return APIObject(
+                    self.connection.get(
+                        self._dict['href'],
+                        params=data),
+                    self.connection)
             else:
                 raise UnsupportedHTTPMethodException(method)
         else:
