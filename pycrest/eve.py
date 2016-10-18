@@ -150,7 +150,8 @@ class APIConnection(object):
             additional_headers=None,
             user_agent=None,
             cache_dir=None,
-            cache=DictCache):
+            cache=DictCache,
+            transport_adapter=None):
         # Set up a Requests Session
         session = requests.Session()
         if additional_headers is None:
@@ -158,6 +159,10 @@ class APIConnection(object):
         if user_agent is None:
             user_agent = "PyCrest/{0} +https://github.com/pycrest/PyCrest"\
                 .format(version)
+        if transport_adapter is not None:
+            session.mount('http://', transport_adapter)
+            session.mount('https://', transport_adapter)
+            
         session.headers.update({
             "User-Agent": user_agent,
             "Accept": "application/json",
