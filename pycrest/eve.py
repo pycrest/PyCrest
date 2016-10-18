@@ -241,9 +241,7 @@ class APIConnection(object):
                 prms.items()))
         
         expires = self._get_expires(res)
-        print caching
         if expires > 0 and caching:
-            print key
             self.cache.put(
                 key, {
                     'expires': time.time() + expires, 'payload': ret})
