@@ -340,6 +340,40 @@ class TestAPIConnection(unittest.TestCase):
         with httmock.HTTMock(cached_request):
             self.api._data = None
             self.assertEqual(self.api()._dict, {})
+          
+    def test_caching_arg_hit(self):
+        """ Test the caching argument for ApiConnection and ApiObject __call__() """
+        
+        @httmock.urlmatch(
+            scheme="https",
+            netloc=r"(api-sisi\.test)?(crest-tq\.)?eveonline\.com$",
+            path=r"^/market/prices/?$")
+        def market_prices_cached_mock(url, request):
+            headers = {'content-type': 'application/json',
+               'Cache-Control': 'max-age=300;'}
+            return httmock.response(
+                status_code=200,
+                headers=headers,
+                content='{}'.encode('utf-8'))
+                        
+        with httmock.HTTMock(root_mock, market_prices_cached_mock):
+            self.assertEquals(self.api.cache._dict, {})
+            
+            self.api(caching=False)
+            self.assertEquals(self.api.cache._dict, {})
+            
+            self.api._data = None
+            self.api()
+            self.assertEquals(len(self.api.cache._dict), 1)
+            
+            self.assertEqual(self.api().marketData(caching=False)._dict, {})
+            self.assertEquals(len(self.api.cache._dict), 1)
+            
+            self.assertEqual(self.api().marketData()._dict, {})
+            
+            print self.api.cache._dict.items()
+            self.assertEquals(len(self.api.cache._dict), 2)
+
 
     def test_cache_invalidate(self):
         @httmock.all_requests
