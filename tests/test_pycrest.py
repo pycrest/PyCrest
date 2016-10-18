@@ -370,8 +370,6 @@ class TestAPIConnection(unittest.TestCase):
             self.assertEqual(len(self.api.cache._dict), 1)
             
             self.assertEqual(self.api().marketData()._dict, {})
-            
-            print self.api.cache._dict.items()
             self.assertEqual(len(self.api.cache._dict), 2)
 
 
