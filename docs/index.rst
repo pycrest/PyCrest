@@ -160,3 +160,29 @@ u'djsdfjklsdf9sd8f908sdf9sd9f8sd9f8sdf8sp9fd89psdf89spdf89spdf89spdf89p'
 
 >>> eve.refr_authorize(refresh_token)
 <pycrest.eve.AuthedConnection object at 0x7f06e21f48d0>
+
+.. highlight:: none
+
+Prevent PyCrest from using cache
+--------------------------------
+
+**No cache for everything in PyCrest**
+This will disable the cache for everything you will do using PyCrest. No call or response will be stored.
+
+.. highlight:: python
+
+>>> pycrest_no_cache = EVE(cache=None)
+
+.. highlight:: none
+
+**Disable caching on demand**
+You can disable the caching for a specific ``get()`` call you don't want to cache, by simply adding ``caching=False|None`` to the call parameters. 
+For example: 
+
+.. highlight:: python
+
+>>> crest_with_caching = EVE()
+>>> crest_root_not_cached = crest_with_caching(caching=False)
+>>> regions = crest_root.regions(caching=False)
+
+.. highlight:: none
