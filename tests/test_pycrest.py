@@ -4,7 +4,7 @@ Created on Jun 27, 2016
 @author: henk
 '''
 import sys
-from pycrest.eve import EVE, DictCache, APICache, FileCache, APIObject,\
+from pycrest.eve import EVE, DictCache, DummyCache, APICache, FileCache, APIObject,\
     MemcachedCache
 import httmock
 import pycrest
@@ -218,7 +218,7 @@ class TestAuthedConnection(unittest.TestCase):
 class TestAPIConnection(unittest.TestCase):
 
     def setUp(self):
-        self.api = EVE()
+        self.api = EVE(cache=DictCache())
 
     def test_user_agent(self):
         @httmock.all_requests
@@ -261,7 +261,8 @@ class TestAPIConnection(unittest.TestCase):
             EVE(additional_headers={'PyCrest-Testing': True})
 
     def test_default_cache(self):
-        self.assertTrue(isinstance(self.api.cache, DictCache))
+        eve = EVE()
+        self.assertTrue(isinstance(eve.cache, DummyCache))
 
     def test_callable_cache(self):
         class CustomCache(object):
@@ -319,7 +320,6 @@ class TestAPIConnection(unittest.TestCase):
                 dict(key='value2'))
 
     def test_cache_hit(self):
-
         @httmock.all_requests
         def prime_cache(url, request):
             headers = {'content-type': 'application/json',
@@ -447,6 +447,22 @@ class TestDictCache(unittest.TestCase):
 
     def test_cache_dir(self):
         pass
+        
+class TestDummyCache(unittest.TestCase):
+
+    def setUp(self):
+        self.c = DummyCache()
+        self.c.put('never_stored', True)
+
+    def test_put(self):
+        self.assertNotIn('never_stored', self.c._dict)
+
+    def test_get(self):
+        self.assertEqual(self.c.get('never_stored'), None)
+
+    def test_invalidate(self):
+        self.c.invalidate('never_stored')
+        self.assertIsNone(self.c.get('never_stored'))
 
 
 class TestFileCache(unittest.TestCase):

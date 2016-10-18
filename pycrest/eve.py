@@ -108,6 +108,22 @@ class DictCache(APICache):
     def invalidate(self, key):
         self._dict.pop(key, None)
 
+        
+class DummyCache(APICache):
+    """ Provide a fake cache class to allow a "no cache"
+        use without breaking everything within APIConnection """
+    def __init__(self):
+        self._dict = {}
+
+    def get(self, key):
+        return None
+
+    def put(self, key, value):
+        pass
+
+    def invalidate(self, key):
+        pass
+        
 
 class MemcachedCache(APICache):
 
@@ -157,7 +173,7 @@ class APIConnection(object):
             self.cache_dir = cache_dir
             self.cache = FileCache(self.cache_dir)
         else:
-            self.cache = DictCache()
+            self.cache = DummyCache()
 
     def _parse_parameters(self, resource, params):
         '''Creates a dictionary from query_string and `params`
