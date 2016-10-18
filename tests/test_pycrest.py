@@ -218,7 +218,7 @@ class TestAuthedConnection(unittest.TestCase):
 class TestAPIConnection(unittest.TestCase):
 
     def setUp(self):
-        self.api = EVE(cache=DictCache())
+        self.api = EVE()
 
     def test_user_agent(self):
         @httmock.all_requests
@@ -261,9 +261,12 @@ class TestAPIConnection(unittest.TestCase):
             EVE(additional_headers={'PyCrest-Testing': True})
 
     def test_default_cache(self):
-        eve = EVE()
-        self.assertTrue(isinstance(eve.cache, DummyCache))
+        self.assertTrue(isinstance(self.api.cache, DictCache))
 
+    def test_no_cache(self):
+        eve = EVE(cache=None)
+        self.assertTrue(isinstance(eve.cache, DummyCache))
+        
     def test_callable_cache(self):
         class CustomCache(object):
             pass

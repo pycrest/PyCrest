@@ -150,7 +150,7 @@ class APIConnection(object):
             additional_headers=None,
             user_agent=None,
             cache_dir=None,
-            cache=None):
+            cache=DictCache):
         # Set up a Requests Session
         session = requests.Session()
         if additional_headers is None:
@@ -164,14 +164,14 @@ class APIConnection(object):
         })
         session.headers.update(additional_headers)
         self._session = session
-        if cache:
+        if cache_dir:
+            self.cache_dir = cache_dir
+            self.cache = FileCache(self.cache_dir)
+        elif cache:
             if isinstance(cache, APICache):
                 self.cache = cache  # Inherit from parents
             elif isinstance(cache, type):
                 self.cache = cache()  # Instantiate a new cache
-        elif cache_dir:
-            self.cache_dir = cache_dir
-            self.cache = FileCache(self.cache_dir)
         else:
             self.cache = DummyCache()
 
