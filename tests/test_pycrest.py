@@ -357,22 +357,22 @@ class TestAPIConnection(unittest.TestCase):
                 content='{}'.encode('utf-8'))
                         
         with httmock.HTTMock(root_mock, market_prices_cached_mock):
-            self.assertEquals(self.api.cache._dict, {})
+            self.assertEqual(self.api.cache._dict, {})
             
             self.api(caching=False)
-            self.assertEquals(self.api.cache._dict, {})
+            self.assertEqual(self.api.cache._dict, {})
             
             self.api._data = None
             self.api()
-            self.assertEquals(len(self.api.cache._dict), 1)
+            self.assertEqual(len(self.api.cache._dict), 1)
             
             self.assertEqual(self.api().marketData(caching=False)._dict, {})
-            self.assertEquals(len(self.api.cache._dict), 1)
+            self.assertEqual(len(self.api.cache._dict), 1)
             
             self.assertEqual(self.api().marketData()._dict, {})
             
             print self.api.cache._dict.items()
-            self.assertEquals(len(self.api.cache._dict), 2)
+            self.assertEqual(len(self.api.cache._dict), 2)
 
 
     def test_cache_invalidate(self):
