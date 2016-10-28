@@ -267,6 +267,10 @@ class TestAPIConnection(unittest.TestCase):
             def __init__(self, *args, **kwargs):
                 super(TestHttpAdapter, self).__init__(*args, **kwargs)
                 
+        class FakeHttpAdapter(object):
+            def __init__(self, *args, **kwargs):
+                pass
+                
         eve = EVE()
         self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
         self.assertTrue(isinstance(eve._session.get_adapter('https://'), HTTPAdapter))
@@ -276,6 +280,15 @@ class TestAPIConnection(unittest.TestCase):
         eve = EVE(transport_adapter=TestHttpAdapter())
         self.assertTrue(isinstance(eve._session.get_adapter('http://'), TestHttpAdapter))
         self.assertTrue(isinstance(eve._session.get_adapter('https://'), TestHttpAdapter))
+        
+        # check that the wrong httpadapter is not used
+        eve = EVE(transport_adapter=FakeHttpAdapter())
+        self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
+        self.assertFalse(isinstance(eve._session.get_adapter('http://'), FakeHttpAdapter))
+        
+        eve = EVE(transport_adapter='')
+        self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
+        
             
     def test_default_cache(self):
         self.assertTrue(isinstance(self.api.cache, DictCache))
