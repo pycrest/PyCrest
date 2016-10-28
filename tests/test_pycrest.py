@@ -4,7 +4,7 @@ Created on Jun 27, 2016
 @author: henk
 '''
 import sys
-from pycrest.eve import EVE, DictCache, APICache, FileCache, APIObject,\
+from pycrest.eve import EVE, DictCache, DummyCache, APICache, FileCache, APIObject,\
     MemcachedCache
 import httmock
 import pycrest
@@ -263,6 +263,10 @@ class TestAPIConnection(unittest.TestCase):
     def test_default_cache(self):
         self.assertTrue(isinstance(self.api.cache, DictCache))
 
+    def test_no_cache(self):
+        eve = EVE(cache=None)
+        self.assertTrue(isinstance(eve.cache, DummyCache))
+        
     def test_callable_cache(self):
         class CustomCache(object):
             pass
@@ -319,7 +323,6 @@ class TestAPIConnection(unittest.TestCase):
                 dict(key='value2'))
 
     def test_cache_hit(self):
-
         @httmock.all_requests
         def prime_cache(url, request):
             headers = {'content-type': 'application/json',
@@ -337,6 +340,38 @@ class TestAPIConnection(unittest.TestCase):
         with httmock.HTTMock(cached_request):
             self.api._data = None
             self.assertEqual(self.api()._dict, {})
+          
+    def test_caching_arg_hit(self):
+        """ Test the caching argument for ApiConnection and ApiObject __call__() """
+        
+        @httmock.urlmatch(
+            scheme="https",
+            netloc=r"(api-sisi\.test)?(crest-tq\.)?eveonline\.com$",
+            path=r"^/market/prices/?$")
+        def market_prices_cached_mock(url, request):
+            headers = {'content-type': 'application/json',
+               'Cache-Control': 'max-age=300;'}
+            return httmock.response(
+                status_code=200,
+                headers=headers,
+                content='{}'.encode('utf-8'))
+                        
+        with httmock.HTTMock(root_mock, market_prices_cached_mock):
+            self.assertEqual(self.api.cache._dict, {})
+            
+            self.api(caching=False)
+            self.assertEqual(self.api.cache._dict, {})
+            
+            self.api._data = None
+            self.api()
+            self.assertEqual(len(self.api.cache._dict), 1)
+            
+            self.assertEqual(self.api().marketData(caching=False)._dict, {})
+            self.assertEqual(len(self.api.cache._dict), 1)
+            
+            self.assertEqual(self.api().marketData()._dict, {})
+            self.assertEqual(len(self.api.cache._dict), 2)
+
 
     def test_cache_invalidate(self):
         @httmock.all_requests
@@ -447,6 +482,22 @@ class TestDictCache(unittest.TestCase):
 
     def test_cache_dir(self):
         pass
+        
+class TestDummyCache(unittest.TestCase):
+
+    def setUp(self):
+        self.c = DummyCache()
+        self.c.put('never_stored', True)
+
+    def test_put(self):
+        self.assertNotIn('never_stored', self.c._dict)
+
+    def test_get(self):
+        self.assertEqual(self.c.get('never_stored'), None)
+
+    def test_invalidate(self):
+        self.c.invalidate('never_stored')
+        self.assertIsNone(self.c.get('never_stored'))
 
 
 class TestFileCache(unittest.TestCase):

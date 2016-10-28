@@ -108,6 +108,22 @@ class DictCache(APICache):
     def invalidate(self, key):
         self._dict.pop(key, None)
 
+        
+class DummyCache(APICache):
+    """ Provide a fake cache class to allow a "no cache"
+        use without breaking everything within APIConnection """
+    def __init__(self):
+        self._dict = {}
+
+    def get(self, key):
+        return None
+
+    def put(self, key, value):
+        pass
+
+    def invalidate(self, key):
+        pass
+        
 
 class MemcachedCache(APICache):
 
@@ -134,7 +150,7 @@ class APIConnection(object):
             additional_headers=None,
             user_agent=None,
             cache_dir=None,
-            cache=None):
+            cache=DictCache):
         # Set up a Requests Session
         session = requests.Session()
         if additional_headers is None:
@@ -148,16 +164,16 @@ class APIConnection(object):
         })
         session.headers.update(additional_headers)
         self._session = session
-        if cache:
+        if cache_dir:
+            self.cache_dir = cache_dir
+            self.cache = FileCache(self.cache_dir)
+        elif cache:
             if isinstance(cache, APICache):
                 self.cache = cache  # Inherit from parents
             elif isinstance(cache, type):
                 self.cache = cache()  # Instantiate a new cache
-        elif cache_dir:
-            self.cache_dir = cache_dir
-            self.cache = FileCache(self.cache_dir)
         else:
-            self.cache = DictCache()
+            self.cache = DummyCache()
 
     def _parse_parameters(self, resource, params):
         '''Creates a dictionary from query_string and `params`
@@ -179,10 +195,10 @@ class APIConnection(object):
             prms[key] = params[key]
         return resource, prms
 
-    def get(self, resource, params={}):
+    def get(self, resource, params={}, caching=True):
         logger.debug('Getting resource %s', resource)
         resource, prms = self._parse_parameters(resource, params)
-
+        
         # check cache
         key = (
             resource, frozenset(
@@ -218,13 +234,14 @@ class APIConnection(object):
 
         ret = res.json()
 
-        # cache result
+        # cache result only if caching = True (default)
         key = (
             resource, frozenset(
                 self._session.headers.items()), frozenset(
                 prms.items()))
+        
         expires = self._get_expires(res)
-        if expires > 0:
+        if expires > 0 and caching:
             self.cache.put(
                 key, {
                     'expires': time.time() + expires, 'payload': ret})
@@ -300,9 +317,9 @@ class EVE(APIConnection):
         self._data = None
         APIConnection.__init__(self, **kwargs)
 
-    def __call__(self):
+    def __call__(self, caching=True):
         if not self._data:
-            self._data = APIObject(self.get(self._endpoint), self)
+            self._data = APIObject(self.get(self._endpoint, caching=caching), self)
         return self._data
 
     def __getattr__(self, item):
@@ -397,9 +414,9 @@ class AuthedConnection(EVE):
         self._session.headers.update(
             {"Authorization": "Bearer %s" % self.token})
 
-    def __call__(self):
+    def __call__(self, caching=True):
         if not self._data:
-            self._data = APIObject(self.get(self._endpoint), self)
+            self._data = APIObject(self.get(self._endpoint, caching=caching), self)
         return self._data
 
     def whoami(self):
@@ -420,10 +437,10 @@ class AuthedConnection(EVE):
             {"Authorization": "Bearer %s" % self.token})
         return self  # for backwards compatibility
 
-    def get(self, resource, params={}):
+    def get(self, resource, params={}, caching=True):
         if int(time.time()) >= self.expires:
             self.refresh()
-        return super(self.__class__, self).get(resource, params)
+        return super(self.__class__, self).get(resource, params, caching)
 
 class APIObject(object):
 
@@ -477,6 +494,7 @@ class APIObject(object):
         if 'href' in self._dict:
             method = kwargs.pop('method', 'get')#default to get: historic behaviour
             data = kwargs.pop('data', {})
+            caching = kwargs.pop('caching', True) # default caching to true, for get requests
 
             #retain compatibility with historic method of passing parameters.
             #Slightly unsatisfactory - what if data is dict-like but not a dict?
@@ -491,7 +509,7 @@ class APIObject(object):
             elif method == 'delete':
                 return APIObject(self.connection.delete(self._dict['href'] ), self.connection)
             elif method == 'get': 
-                return APIObject(self.connection.get(self._dict['href'], params=data), self.connection)
+                return APIObject(self.connection.get(self._dict['href'], params=data, caching=caching), self.connection)
             else:
                 raise UnsupportedHTTPMethodException(method)
         else:
