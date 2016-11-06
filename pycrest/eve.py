@@ -159,7 +159,7 @@ class APIConnection(object):
         if user_agent is None:
             user_agent = "PyCrest/{0} +https://github.com/pycrest/PyCrest"\
                 .format(version)
-        if transport_adapter is not None and isinstance(transport_adapter, HTTPAdapter):
+        if isinstance(transport_adapter, HTTPAdapter):
             session.mount('http://', transport_adapter)
             session.mount('https://', transport_adapter)
             
