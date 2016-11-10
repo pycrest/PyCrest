@@ -13,6 +13,7 @@ import mock
 import errno
 from pycrest.errors import APIException, UnsupportedHTTPMethodException
 from requests.models import PreparedRequest
+from requests.adapters import HTTPAdapter
 import unittest
 
 try:
@@ -261,6 +262,35 @@ class TestAPIConnection(unittest.TestCase):
         with httmock.HTTMock(check_custom_headers):
             EVE(additional_headers={'PyCrest-Testing': True})
 
+    def test_custom_transport_adapter(self):
+        """ Check if the transport adapter is the one expected (especially if we set it) """
+        class TestHttpAdapter(HTTPAdapter):
+            def __init__(self, *args, **kwargs):
+                super(TestHttpAdapter, self).__init__(*args, **kwargs)
+                
+        class FakeHttpAdapter(object):
+            def __init__(self, *args, **kwargs):
+                pass
+                
+        eve = EVE()
+        self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
+        self.assertTrue(isinstance(eve._session.get_adapter('https://'), HTTPAdapter))
+        self.assertFalse(isinstance(eve._session.get_adapter('http://'), TestHttpAdapter))
+        self.assertFalse(isinstance(eve._session.get_adapter('https://'), TestHttpAdapter))
+        
+        eve = EVE(transport_adapter=TestHttpAdapter())
+        self.assertTrue(isinstance(eve._session.get_adapter('http://'), TestHttpAdapter))
+        self.assertTrue(isinstance(eve._session.get_adapter('https://'), TestHttpAdapter))
+        
+        # check that the wrong httpadapter is not used
+        eve = EVE(transport_adapter=FakeHttpAdapter())
+        self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
+        self.assertFalse(isinstance(eve._session.get_adapter('http://'), FakeHttpAdapter))
+        
+        eve = EVE(transport_adapter='')
+        self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
+        
+            
     def test_default_cache(self):
         self.assertTrue(isinstance(self.api.cache, DictCache))
 
