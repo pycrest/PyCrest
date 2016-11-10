@@ -92,9 +92,23 @@ market data endpoint:
 
 .. highlight:: none
 
-By default resources are cached in-memory, you can change this behaviour by passing the `cache_dir` keyword
-argument to the EVE class.  If you do so, the responses will be cached in the filesystem, allowing the cache
-to persist across multiple instances of the application.
+By default resources are cached in-memory, you can change this behaviour by passing the `cache` keyword
+argument to the EVE class, with an instance of an object that implements APICache. There are several caches
+available in the pycrest.cache module.
+
+pycrest.cache.DictCache is the default cache and caches requests in memory. Any cached objects will be lost when the process terminates.
+pycrest.cache.FileCache caches requests on disc. It has one keyword argument named 'path' which configures a directory where file objects will be stored.
+pycrest.cache.MemcachedCache connects to a memcached server and stores objects in memory. This is very fast and has the advantage over DictCache that the cached objects can be shared across multiple processes. It has one keyword argument named 'server_list' which is a list of memached servers to use (for example ['127.0.0.1:11211']). This cache requires python-memcached to be installed.
+pycrest.cache.DummyCache doesn't cache anything.
+
+.. highlight:: python
+
+>>> import pycrest
+>>> from pycrest.cache import FileCache
+>>> file_cache = FileCache(path='/tmp/pycrest_cache')
+>>> eve = pycrest.EVE(cache=file_cache) 
+
+.. highlight:: none
 
 Authorized Connections
 ======================

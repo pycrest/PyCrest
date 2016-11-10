@@ -4,7 +4,8 @@ Created on Jun 27, 2016
 @author: henk
 '''
 import sys
-from pycrest.eve import EVE, DictCache, DummyCache, APICache, FileCache, APIObject,\
+from pycrest.eve import EVE, APIObject
+from pycrest.cache import DictCache, DummyCache, APICache, FileCache,\
     MemcachedCache
 import httmock
 import pycrest
@@ -267,22 +268,25 @@ class TestAPIConnection(unittest.TestCase):
         eve = EVE(cache=None)
         self.assertTrue(isinstance(eve.cache, DummyCache))
         
-    def test_callable_cache(self):
+    def test_implements_apiobject(self):
         class CustomCache(object):
             pass
-        eve = EVE(cache=CustomCache)
-        self.assertTrue(isinstance(eve.cache, CustomCache))
+        with self.assertRaises(ValueError):
+            eve = EVE(cache=CustomCache)
 
     def test_apicache(self):
         eve = EVE(cache=DictCache())
         self.assertTrue(isinstance(eve.cache, DictCache))
 
-    @mock.patch('os.path.isdir', return_value=False)
-    @mock.patch('os.mkdir')
-    def test_cache_dir(self, mkdir_function, isdir_function):
-        eve = EVE(cache_dir=TestFileCache.DIR)
-        self.assertEqual(eve.cache_dir, TestFileCache.DIR)
-        self.assertTrue(isinstance(eve.cache, FileCache))
+
+    @mock.patch('os.path.isdir', return_value=False)		
+    @mock.patch('os.mkdir')		
+    def test_file_cache(self, mkdir_function, isdir_function):
+        file_cache = FileCache(path=TestFileCache.DIR)
+        eve = EVE(cache=file_cache)		
+        self.assertEqual(file_cache.path, TestFileCache.DIR)		
+        self.assertTrue(isinstance(eve.cache, FileCache))		
+
 
     def test_default_url(self):
 
