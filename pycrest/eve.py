@@ -4,7 +4,7 @@ import time
 from pycrest import version
 from pycrest.compat import bytes_, text_
 from pycrest.errors import APIException, UnsupportedHTTPMethodException
-
+from requests.adapters import HTTPAdapter
 try:
     from urllib.parse import urlparse, urlunparse, parse_qsl
 except ImportError:  # pragma: no cover
@@ -28,6 +28,7 @@ class APIConnection(object):
             self,
             additional_headers=None,
             user_agent=None,
+            transport_adapter=None,
             **kwargs):
         '''Initialises a PyCrest object
 
@@ -44,6 +45,10 @@ class APIConnection(object):
         if user_agent is None:
             user_agent = "PyCrest/{0} +https://github.com/pycrest/PyCrest"\
                 .format(version)
+        if isinstance(transport_adapter, HTTPAdapter):
+            session.mount('http://', transport_adapter)
+            session.mount('https://', transport_adapter)
+            
         session.headers.update({
             "User-Agent": user_agent,
             "Accept": "application/json",
