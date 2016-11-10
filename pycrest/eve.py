@@ -48,7 +48,7 @@ class APIConnection(object):
         if isinstance(transport_adapter, HTTPAdapter):
             session.mount('http://', transport_adapter)
             session.mount('https://', transport_adapter)
-            
+
         session.headers.update({
             "User-Agent": user_agent,
             "Accept": "application/json",
@@ -89,7 +89,7 @@ class APIConnection(object):
     def get(self, resource, params={}, caching=True):
         logger.debug('Getting resource %s', resource)
         resource, prms = self._parse_parameters(resource, params)
-        
+
         # check cache
         key = (
             resource, frozenset(
@@ -114,14 +114,13 @@ class APIConnection(object):
 
         logger.debug('Getting resource %s (params=%s)', resource, prms)
         res = self._session.get(resource, params=prms)
-        
+
         if res.status_code != 200:
             raise APIException(
                 resource,
                 res.status_code,
                 res.json()
                 )
-                
 
         ret = res.json()
 
@@ -130,7 +129,7 @@ class APIConnection(object):
             resource, frozenset(
                 self._session.headers.items()), frozenset(
                 prms.items()))
-        
+
         expires = self._get_expires(res)
         if expires > 0 and caching:
             self.cache.put(
@@ -139,7 +138,7 @@ class APIConnection(object):
 
         return ret
 
-    #post is not idempotent so there should be no caching
+    # post is not idempotent so there should be no caching
     def post(self, resource, data={}):
         logger.debug('Posting resource %s (data=%s)', resource, data)
         res = self._session.post(resource, data=data)
@@ -152,7 +151,7 @@ class APIConnection(object):
 
         return {}
 
-    #put is not idempotent so there should be no caching
+    # put is not idempotent so there should be no caching
     def put(self, resource, data={}):
         logger.debug('Putting resource %s (data=%s)', resource, data)
         res = self._session.put(resource, data=data)
@@ -165,7 +164,7 @@ class APIConnection(object):
 
         return {}
 
-    #delete is not idempotent so there should be no caching
+    # delete is not idempotent so there should be no caching
     def delete(self, resource):
         logger.debug('Deleting resource %s', resource)
         res = self._session.delete(resource)
@@ -210,7 +209,9 @@ class EVE(APIConnection):
 
     def __call__(self, caching=True):
         if not self._data:
-            self._data = APIObject(self.get(self._endpoint, caching=caching), self)
+            self._data = APIObject(self.get(self._endpoint,
+                                            caching=caching),
+                                   self)
         return self._data
 
     def __getattr__(self, item):
@@ -333,6 +334,7 @@ class AuthedConnection(EVE):
             self.refresh()
         return super(self.__class__, self).get(resource, params, caching)
 
+
 class APIObject(object):
 
     def __init__(self, parent, connection):
@@ -362,8 +364,6 @@ class APIObject(object):
             return self._dict[item]
         raise AttributeError(item)
 
-
-
     def __call__(self, **kwargs):
         """carries out a CREST request
 
@@ -375,22 +375,22 @@ class APIObject(object):
         data contains any arguments that will be passed with the request -
             it could be a dictionary which contains parameters
             and is passed via the url for 'get' requests and as form-encoded
-            data for 'post' or 'put' requests. It could also be a string if 
-            another format of data (e.g. via json.dumps()) must be passed in 
+            data for 'post' or 'put' requests. It could also be a string if
+            another format of data (e.g. via json.dumps()) must be passed in
             a 'post' or 'put' request. This parameter has no effect on
             'delete' requests.
         """
 
         # Caching is now handled by APIConnection
         if 'href' in self._dict:
-            method = kwargs.pop('method', 'get')#default to get: historic behaviour
+            method = kwargs.pop('method', 'get')    # default to get: historic behaviour
             data = kwargs.pop('data', {})
-            caching = kwargs.pop('caching', True) # default caching to true, for get requests
+            caching = kwargs.pop('caching', True)   # default caching to true, for get requests
 
-            #retain compatibility with historic method of passing parameters.
-            #Slightly unsatisfactory - what if data is dict-like but not a dict?
+            # retain compatibility with historic method of passing parameters.
+            # Slightly unsatisfactory - what if data is dict-like but not a dict?
             if isinstance(data, dict):
-                for arg in kwargs: 
+                for arg in kwargs:
                     data[arg] = kwargs[arg]
 
             if method == 'post':
@@ -398,9 +398,12 @@ class APIObject(object):
             elif method == 'put':
                 return APIObject(self.connection.put(self._dict['href'], data=data), self.connection)
             elif method == 'delete':
-                return APIObject(self.connection.delete(self._dict['href'] ), self.connection)
-            elif method == 'get': 
-                return APIObject(self.connection.get(self._dict['href'], params=data, caching=caching), self.connection)
+                return APIObject(self.connection.delete(self._dict['href']), self.connection)
+            elif method == 'get':
+                return APIObject(self.connection.get(self._dict['href'],
+                                                     params=data,
+                                                     caching=caching),
+                                 self.connection)
             else:
                 raise UnsupportedHTTPMethodException(method)
         else:
