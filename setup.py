@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='pycrest',
-    version='0.0.5',
+    version='0.0.6',
     packages=['pycrest'],
     url='https://github.com/pycrest/PyCrest',
     license='MIT License',
