@@ -1,5 +1,7 @@
-from pycrest.errors import APIException, UnsupportedHTTPMethodException
 import unittest
+
+from pycrest.errors import APIException
+from pycrest.errors import UnsupportedHTTPMethodException
 
 try:
     import __builtin__
@@ -9,14 +11,17 @@ except ImportError:
     builtins_name = builtins.__name__
 
 
-
 class TestAPIException(unittest.TestCase):
 
     def setUp(self):
         pass
 
     def test_apiexception_data(self):
-        e = APIException('http://example.com', 205, {'message' : 'example error'})
+        e = APIException(
+            'http://example.com',
+            205,
+            {'message': 'example error'}
+        )
 
         self.assertEqual(
             e.url,
@@ -27,28 +32,38 @@ class TestAPIException(unittest.TestCase):
             205)
 
     def test_apiexception_str_message(self):
-        e = APIException('http://example.com', 205, {'message' : 'example error'})
+        e = APIException(
+            'http://example.com',
+            205,
+            {'message': 'example error'}
+        )
 
         self.assertIn(
             'example error',
             str(e))
 
-        self.assertIn( '205', str(e) )
+        self.assertIn('205', str(e))
 
     def test_apiexception_str_error(self):
-        e = APIException('http://example.com', 205, {'error' : 'example error'})
+        e = APIException(
+            'http://example.com',
+            205,
+            {'error': 'example error'}
+        )
 
         self.assertIn(
             'example error',
             str(e))
 
-        self.assertIn( '205', str(e) )
-
-
+        self.assertIn('205', str(e))
 
     def test_apiexception_str_no_message(self):
-        e = APIException('http://example.com', 205, {'exception_type' : 'wierd'})
-        self.assertIn( '205', str(e) )
+        e = APIException(
+            'http://example.com',
+            205,
+            {'exception_type': 'wierd'}
+        )
+        self.assertIn('205', str(e))
 
 
 class TestUnsupportedHTTPMethodException(unittest.TestCase):
@@ -57,7 +72,7 @@ class TestUnsupportedHTTPMethodException(unittest.TestCase):
 
     def test_exception_str(self):
         e = UnsupportedHTTPMethodException('flatten')
-        self.assertIn( 'flatten', str(e) )
+        self.assertIn('flatten', str(e))
 
 
 if __name__ == "__main__":

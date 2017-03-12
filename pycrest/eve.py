@@ -1,9 +1,13 @@
 import base64
 import requests
 import time
+
 from pycrest import version
-from pycrest.compat import bytes_, text_
-from pycrest.errors import APIException, UnsupportedHTTPMethodException
+from pycrest.compat import bytes_
+from pycrest.compat import text_
+from pycrest.errors import APIException
+from pycrest.errors import UnsupportedHTTPMethodException
+from pycrest.events import after_token_refresh
 from requests.adapters import HTTPAdapter
 try:
     from urllib.parse import urlparse, urlunparse, parse_qsl
@@ -16,7 +20,10 @@ except ImportError:  # pragma: no cover
     from urllib import quote
 import logging
 import re
-from pycrest.cache import DictCache, APICache, DummyCache
+
+from pycrest.cache import APICache
+from pycrest.cache import DictCache
+from pycrest.cache import DummyCache
 
 logger = logging.getLogger("pycrest.eve")
 cache_re = re.compile(r'max-age=([0-9]+)')
@@ -33,9 +40,11 @@ class APIConnection(object):
         '''Initialises a PyCrest object
 
         Keyword arguments:
-        additional_headers - a list of http headers that will be sent to the server
+        additional_headers - a list of http headers
+                             that will be sent to the server
         user_agent - a custom user agent
-        cache - an instance of an APICache object that will cache HTTP Requests.
+        cache - an instance of an APICache object
+                that will cache HTTP Requests.
                 Default is DictCache, pass cache=None to disable caching.
         '''
         # Set up a Requests Session
@@ -219,7 +228,8 @@ class EVE(APIConnection):
 
     def auth_uri(self, scopes=None, state=None):
         s = [] if not scopes else scopes
-        return "%s/authorize?response_type=code&redirect_uri=%s&client_id=%s%s%s" % (
+        return ("%s/authorize?response_type=code&redirect_uri=%s"
+                "&client_id=%s%s%s") % (
             self._oauth_endpoint,
             quote(self.redirect_uri, safe=''),
             self.client_id,
@@ -308,7 +318,10 @@ class AuthedConnection(EVE):
 
     def __call__(self, caching=True):
         if not self._data:
-            self._data = APIObject(self.get(self._endpoint, caching=caching), self)
+            self._data = APIObject(
+                self.get(self._endpoint, caching=caching),
+                self
+            )
         return self._data
 
     def whoami(self):
@@ -327,6 +340,10 @@ class AuthedConnection(EVE):
         self.expires = int(time.time()) + res['expires_in']
         self._session.headers.update(
             {"Authorization": "Bearer %s" % self.token})
+
+        # trigger the signal
+        after_token_refresh.send(**res)
+
         return self  # for backwards compatibility
 
     def get(self, resource, params={}, caching=True):
@@ -383,22 +400,33 @@ class APIObject(object):
 
         # Caching is now handled by APIConnection
         if 'href' in self._dict:
-            method = kwargs.pop('method', 'get')    # default to get: historic behaviour
+            # default to get: historic behaviour
+            method = kwargs.pop('method', 'get')
             data = kwargs.pop('data', {})
-            caching = kwargs.pop('caching', True)   # default caching to true, for get requests
+            # default caching to true, for get requests
+            caching = kwargs.pop('caching', True)
 
             # retain compatibility with historic method of passing parameters.
-            # Slightly unsatisfactory - what if data is dict-like but not a dict?
+            # Slightly unsatisfactory; what if data is dict-like but not a dict
             if isinstance(data, dict):
                 for arg in kwargs:
                     data[arg] = kwargs[arg]
 
             if method == 'post':
-                return APIObject(self.connection.post(self._dict['href'], data=data), self.connection)
+                return APIObject(
+                    self.connection.post(self._dict['href'], data=data),
+                    self.connection
+                )
             elif method == 'put':
-                return APIObject(self.connection.put(self._dict['href'], data=data), self.connection)
+                return APIObject(
+                     self.connection.put(self._dict['href'], data=data),
+                     self.connection
+                 )
             elif method == 'delete':
-                return APIObject(self.connection.delete(self._dict['href']), self.connection)
+                return APIObject(
+                    self.connection.delete(self._dict['href']),
+                    self.connection
+                )
             elif method == 'get':
                 return APIObject(self.connection.get(self._dict['href'],
                                                      params=data,

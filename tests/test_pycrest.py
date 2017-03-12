@@ -3,18 +3,21 @@ Created on Jun 27, 2016
 
 @author: henk
 '''
-import sys
-from pycrest.eve import EVE, APIObject
-from pycrest.cache import DictCache, DummyCache, APICache, FileCache,\
-    MemcachedCache
 import httmock
-import pycrest
 import mock
-import errno
-from pycrest.errors import APIException, UnsupportedHTTPMethodException
-from requests.models import PreparedRequest
-from requests.adapters import HTTPAdapter
+import pycrest
 import unittest
+
+from pycrest.cache import DictCache
+from pycrest.cache import DummyCache
+from pycrest.cache import FileCache
+from pycrest.errors import APIException
+from pycrest.errors import UnsupportedHTTPMethodException
+from pycrest.eve import APIObject
+from pycrest.eve import EVE
+from pycrest.events import after_token_refresh
+from requests.adapters import HTTPAdapter
+from requests.models import PreparedRequest
 
 try:
     import __builtin__
@@ -105,6 +108,7 @@ def market_prices_mock(url, request):
                 ' "pageCount": 1,'
                 ' "pageCount_str": "1",'
                 ' "totalCount": 10213}')
+
 
 @httmock.urlmatch(
     scheme="https",
@@ -208,6 +212,13 @@ class TestAuthedConnection(unittest.TestCase):
             self.authed.whoami()
 
     def test_refresh(self):
+        def refresh_event_receiver(access_token, refresh_token, expires_in):
+            """ fake event receiver to test the signal trigger """
+            self.assertEqual(access_token, 'access_token')
+            self.assertEqual(refresh_token, 'refresh_token')
+            self.assertEqual(expires_in, 300)
+        after_token_refresh.add_receiver(refresh_event_receiver)
+
         with httmock.HTTMock(*all_httmocks):
             self.authed.refresh()
 
@@ -218,6 +229,7 @@ class TestAuthedConnection(unittest.TestCase):
 
 
 class TestAPIConnection(unittest.TestCase):
+    TEST_DIR = '/tmp/TestFileCache'
 
     def setUp(self):
         self.api = EVE()
@@ -263,63 +275,79 @@ class TestAPIConnection(unittest.TestCase):
             EVE(additional_headers={'PyCrest-Testing': True})
 
     def test_custom_transport_adapter(self):
-        """ Check if the transport adapter is the one expected (especially if we set it) """
+        """ Check if the transport adapter is the one expected
+        (especially if we set it)
+        """
         class TestHttpAdapter(HTTPAdapter):
             def __init__(self, *args, **kwargs):
                 super(TestHttpAdapter, self).__init__(*args, **kwargs)
-                
+
         class FakeHttpAdapter(object):
             def __init__(self, *args, **kwargs):
                 pass
-                
+
         eve = EVE()
-        self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
-        self.assertTrue(isinstance(eve._session.get_adapter('https://'), HTTPAdapter))
-        self.assertFalse(isinstance(eve._session.get_adapter('http://'), TestHttpAdapter))
-        self.assertFalse(isinstance(eve._session.get_adapter('https://'), TestHttpAdapter))
-        
+        self.assertTrue(
+            isinstance(eve._session.get_adapter('http://'), HTTPAdapter)
+        )
+        self.assertTrue(
+            isinstance(eve._session.get_adapter('https://'), HTTPAdapter)
+        )
+        self.assertFalse(
+            isinstance(eve._session.get_adapter('http://'), TestHttpAdapter)
+        )
+        self.assertFalse(
+            isinstance(eve._session.get_adapter('https://'), TestHttpAdapter)
+        )
+
         eve = EVE(transport_adapter=TestHttpAdapter())
-        self.assertTrue(isinstance(eve._session.get_adapter('http://'), TestHttpAdapter))
-        self.assertTrue(isinstance(eve._session.get_adapter('https://'), TestHttpAdapter))
-        
+        self.assertTrue(
+            isinstance(eve._session.get_adapter('http://'), TestHttpAdapter)
+        )
+        self.assertTrue(
+            isinstance(eve._session.get_adapter('https://'), TestHttpAdapter)
+        )
+
         # check that the wrong httpadapter is not used
         eve = EVE(transport_adapter=FakeHttpAdapter())
-        self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
-        self.assertFalse(isinstance(eve._session.get_adapter('http://'), FakeHttpAdapter))
-        
+        self.assertTrue(
+            isinstance(eve._session.get_adapter('http://'), HTTPAdapter)
+        )
+        self.assertFalse(
+            isinstance(eve._session.get_adapter('http://'), FakeHttpAdapter)
+        )
+
         eve = EVE(transport_adapter='')
-        self.assertTrue(isinstance(eve._session.get_adapter('http://'), HTTPAdapter))
-        
-            
+        self.assertTrue(
+            isinstance(eve._session.get_adapter('http://'), HTTPAdapter)
+        )
+
     def test_default_cache(self):
         self.assertTrue(isinstance(self.api.cache, DictCache))
 
     def test_no_cache(self):
         eve = EVE(cache=None)
         self.assertTrue(isinstance(eve.cache, DummyCache))
-        
+
     def test_implements_apiobject(self):
         class CustomCache(object):
             pass
         with self.assertRaises(ValueError):
-            eve = EVE(cache=CustomCache)
+            EVE(cache=CustomCache)
 
     def test_apicache(self):
         eve = EVE(cache=DictCache())
         self.assertTrue(isinstance(eve.cache, DictCache))
 
-
-    @mock.patch('os.path.isdir', return_value=False)		
-    @mock.patch('os.mkdir')		
+    @mock.patch('os.path.isdir', return_value=False)
+    @mock.patch('os.mkdir')
     def test_file_cache(self, mkdir_function, isdir_function):
-        file_cache = FileCache(path=TestFileCache.DIR)
-        eve = EVE(cache=file_cache)		
-        self.assertEqual(file_cache.path, TestFileCache.DIR)		
-        self.assertTrue(isinstance(eve.cache, FileCache))		
-
+        file_cache = FileCache(path=TestAPIConnection.TEST_DIR)
+        eve = EVE(cache=file_cache)
+        self.assertEqual(file_cache.path, TestAPIConnection.TEST_DIR)
+        self.assertTrue(isinstance(eve.cache, FileCache))
 
     def test_default_url(self):
-
         @httmock.all_requests
         def root_mock(url, request):
             self.assertEqual(url.path, '/')
@@ -331,7 +359,6 @@ class TestAPIConnection(unittest.TestCase):
             self.api()
 
     def test_parse_parameters_url(self):
-
         @httmock.all_requests
         def key_mock(url, request):
             self.assertEqual(url.path, '/')
@@ -343,7 +370,6 @@ class TestAPIConnection(unittest.TestCase):
             self.api.get('https://crest-tq.eveonline.com/?key=value1')
 
     def test_parse_parameters_override(self):
-
         @httmock.all_requests
         def key_mock(url, request):
             self.assertEqual(url.path, '/')
@@ -374,38 +400,41 @@ class TestAPIConnection(unittest.TestCase):
         with httmock.HTTMock(cached_request):
             self.api._data = None
             self.assertEqual(self.api()._dict, {})
-          
+
     def test_caching_arg_hit(self):
-        """ Test the caching argument for ApiConnection and ApiObject __call__() """
-        
+        """ Test the caching argument for ApiConnection
+        and ApiObject __call__()
+        """
+
         @httmock.urlmatch(
             scheme="https",
             netloc=r"(api-sisi\.test)?(crest-tq\.)?eveonline\.com$",
             path=r"^/market/prices/?$")
         def market_prices_cached_mock(url, request):
-            headers = {'content-type': 'application/json',
-               'Cache-Control': 'max-age=300;'}
+            headers = {
+                'content-type': 'application/json',
+                'Cache-Control': 'max-age=300;'
+            }
             return httmock.response(
                 status_code=200,
                 headers=headers,
                 content='{}'.encode('utf-8'))
-                        
+
         with httmock.HTTMock(root_mock, market_prices_cached_mock):
             self.assertEqual(self.api.cache._dict, {})
-            
+
             self.api(caching=False)
             self.assertEqual(self.api.cache._dict, {})
-            
+
             self.api._data = None
             self.api()
             self.assertEqual(len(self.api.cache._dict), 1)
-            
+
             self.assertEqual(self.api().marketData(caching=False)._dict, {})
             self.assertEqual(len(self.api.cache._dict), 1)
-            
+
             self.assertEqual(self.api().marketData()._dict, {})
             self.assertEqual(len(self.api.cache._dict), 2)
-
 
     def test_cache_invalidate(self):
         @httmock.all_requests
@@ -436,7 +465,7 @@ class TestAPIConnection(unittest.TestCase):
 
         @httmock.all_requests
         def non_http_200(url, request):
-            return {'status_code': 404, 'content' : {'message' : 'not found'}}
+            return {'status_code': 404, 'content': {'message': 'not found'}}
 
         with httmock.HTTMock(non_http_200):
             self.assertRaises(APIException, self.api)
@@ -481,164 +510,6 @@ class TestAPIConnection(unittest.TestCase):
 
         with httmock.HTTMock(expired_request):
             self.api()
-
-
-class TestAPICache(unittest.TestCase):
-
-    def setUp(self):
-        self.c = APICache()
-
-    def test_put(self):
-        self.assertRaises(NotImplementedError, self.c.get, 'key')
-
-    def test_get(self):
-        self.assertRaises(NotImplementedError, self.c.put, 'key', 'val')
-
-    def test_invalidate(self):
-        self.assertRaises(NotImplementedError, self.c.invalidate, 'key')
-
-
-class TestDictCache(unittest.TestCase):
-
-    def setUp(self):
-        self.c = DictCache()
-        self.c.put('key', True)
-
-    def test_put(self):
-        self.assertEqual(self.c._dict['key'], True)
-
-    def test_get(self):
-        self.assertEqual(self.c.get('key'), True)
-
-    def test_invalidate(self):
-        self.c.invalidate('key')
-        self.assertIsNone(self.c.get('key'))
-
-    def test_cache_dir(self):
-        pass
-        
-class TestDummyCache(unittest.TestCase):
-
-    def setUp(self):
-        self.c = DummyCache()
-        self.c.put('never_stored', True)
-
-    def test_put(self):
-        self.assertNotIn('never_stored', self.c._dict)
-
-    def test_get(self):
-        self.assertEqual(self.c.get('never_stored'), None)
-
-    def test_invalidate(self):
-        self.c.invalidate('never_stored')
-        self.assertIsNone(self.c.get('never_stored'))
-
-
-class TestFileCache(unittest.TestCase):
-    '''
-    Class for testing the filecache
-
-    TODO: Debug wth this test is creating an SSL connection
-    '''
-
-    DIR = '/tmp/TestFileCache'
-
-    @mock.patch('os.path.isdir')
-    @mock.patch('os.mkdir')
-    @mock.patch('{0}.open'.format(builtins_name))
-    def setUp(self, open_function, mkdir_function, isdir_function):
-        self.c = FileCache(TestFileCache.DIR)
-        self.c.put('key', 'value')
-
-    @mock.patch('os.path.isdir', return_value=False)
-    @mock.patch('os.mkdir')
-    def test_init(self, mkdir_function, isdir_function):
-        c = FileCache(TestFileCache.DIR)
-
-        # Ensure path has been set
-        self.assertEqual(c.path, TestFileCache.DIR)
-
-        # Ensure we checked if the dir was already there
-        args, kwargs = isdir_function.call_args
-        self.assertEqual((TestFileCache.DIR,), args)
-
-        # Ensure we called mkdir with the right args
-        args, kwargs = mkdir_function.call_args
-        self.assertEqual((TestFileCache.DIR, 0o700), args)
-
-#     @unittest.skip("https://github.com/pycrest/PyCrest/issues/30")
-#     def test_getpath(self):
-#         self.assertEqual(self.c._getpath('key'),
-#                          os.path.join(TestFileCache.DIR,
-#                                       '1140801208126482496.cache'))
-
-    def test_get_uncached(self):
-        # Check non-existant key
-        self.assertIsNone(self.c.get('nope'))
-
-    @mock.patch('builtins.open')
-    def test_get_cached(self, open_function):
-        self.assertEqual(self.c.get('key'), 'value')
-
-    @unittest.skipIf(
-        sys.version_info < (
-            3,), 'Python 2.x uses a diffrent protocol')
-    @mock.patch('{0}.open'.format(builtins_name), mock.mock_open(
-        read_data=b'x\x9ck`\ne-K\xcc)M-d\xd0\x03\x00\x17\xde\x03\x99'))
-    def test_get_cached_file_py3(self):
-        del(self.c._cache['key'])
-        self.assertEqual(self.c.get('key'), 'value')
-
-    @unittest.skipIf(
-        sys.version_info > (
-            3,), 'Python 3.x uses a diffrent protocol')
-    @mock.patch('{0}.open'.format(builtins_name), mock.mock_open(
-        read_data='x\x9ck`\ne-K\xcc)M-d\xd0\x03\x00\x17\xde\x03\x99'))
-    def test_get_cached_file_py2(self):
-        del(self.c._cache['key'])
-        self.assertEqual(self.c.get('key'), 'value')
-
-    @mock.patch('os.unlink')
-    def test_invalidate(self, unlink_function):
-        # Make sure our key is here in the first place
-        self.assertIn('key', self.c._cache)
-
-        # Unset the key and ensure unlink() was called
-        self.c.invalidate('key')
-        self.assertTrue(unlink_function.called)
-        # TODO: When paths are predictable check the args
-        #   See https://github.com/pycrest/PyCrest/issues/30
-
-    @mock.patch(
-        'os.unlink',
-        side_effect=OSError(
-            errno.ENOENT,
-            'No such file or directory'))
-    def test_unlink_exception(self, unlink_function):
-        self.assertIsNone(self.c.invalidate('key'))
-
-
-class TestMemcachedCache(unittest.TestCase):
-    '''A very basic MemcachedCache TestCase
-
-    Primairy goal of this unittest is to get the coverage up
-    to spec. Should probably make use of `mockcache` in the future'''
-
-    memcache_mock = mock.MagicMock()
-    memcache_mock.get.return_value = 'value'
-
-    @mock.patch('memcache.Client', return_value=memcache_mock)
-    def setUp(self, mock_memcache):
-        self.c = MemcachedCache(['127.0.0.1:11211'])
-
-    def test_put(self):
-        self.c.put('key', 'value')
-
-    def test_get(self):
-        self.assertEqual(self.c.get('key'), 'value')
-
-    def test_invalidate(self):
-        self.c.invalidate('key')
 
 
 class TestAPIObject(unittest.TestCase):
@@ -688,39 +559,59 @@ class TestAPIObject(unittest.TestCase):
 
         @httmock.all_requests
         def non_http_200(url, request):
-          return {'status_code': 404, 'content' : {'message' : 'not found'}}
+            return {'status_code': 404, 'content': {'message': 'not found'}}
 
         with httmock.HTTMock(non_http_200):
-            self.assertRaises(APIException, self.api.writeableEndpoint, method='post')
+            self.assertRaises(
+                APIException,
+                self.api.writeableEndpoint,
+                method='post'
+            )
 
     def test_non_http_200_put(self):
 
         @httmock.all_requests
         def non_http_200(url, request):
-            return {'status_code': 201, 'content' : {'message' : 'created new object'}}
+            return {
+                'status_code': 201,
+                'content': {'message': 'created new object'}
+            }
 
         with httmock.HTTMock(non_http_200):
-            self.assertRaises(APIException, self.api.writeableEndpoint, method='put')
+            self.assertRaises(
+                APIException,
+                self.api.writeableEndpoint,
+                method='put'
+            )
 
     def test_non_http_200_delete(self):
 
         @httmock.all_requests
         def non_http_200(url, request):
-            return {'status_code': 201, 'content' : {'message' : 'created new object'}}
+            return {
+                'status_code': 201,
+                'content': {'message': 'created new object'}
+            }
 
         with httmock.HTTMock(non_http_200):
-            self.assertRaises(APIException, self.api.writeableEndpoint, method='delete')
+            self.assertRaises(
+                APIException,
+                self.api.writeableEndpoint,
+                method='delete'
+            )
 
-    #201 received from successful contact creation via POST
+    # 201 received from successful contact creation via POST
     def test_http_201_post(self):
         @httmock.all_requests
         def http_201(url, request):
-            return {'status_code': 201, 'content' : {'message' : 'created new object'}}
+            return {
+                'status_code': 201,
+                'content': {'message': 'created new object'}
+            }
 
         with httmock.HTTMock(http_201):
             res = self.api.writeableEndpoint(method='post')
         self.assertTrue(isinstance(res, APIObject))
-
 
     def test_double_call_self(self):
         with httmock.HTTMock(*all_httmocks):
@@ -736,19 +627,26 @@ class TestAPIObject(unittest.TestCase):
 
     def test_string_parameter_passing(self):
         with httmock.HTTMock(*all_httmocks):
-            res = self.api.writeableEndpoint(method='post', data='some (json?) data')
+            res = self.api.writeableEndpoint(
+                method='post',
+                data='some (json?) data'
+            )
 
         self.assertTrue(isinstance(res, APIObject))
 
     def test_dict_parameter_passing(self):
         with httmock.HTTMock(*all_httmocks):
-          res = self.api.writeableEndpoint(data={'arg1' : 'val1' })
+            res = self.api.writeableEndpoint(data={'arg1': 'val1'})
 
         self.assertTrue(isinstance(res, APIObject))
 
     def test_unhandled_http_method_exception(self):
         with httmock.HTTMock(*all_httmocks):
-            self.assertRaises(UnsupportedHTTPMethodException, self.api.writeableEndpoint, method='snip') #made-up http method
+            self.assertRaises(
+                UnsupportedHTTPMethodException,
+                self.api.writeableEndpoint,
+                method='snip'
+             )  # made-up http method
 
 if __name__ == "__main__":
     unittest.main()

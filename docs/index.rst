@@ -106,7 +106,7 @@ pycrest.cache.DummyCache doesn't cache anything.
 >>> import pycrest
 >>> from pycrest.cache import FileCache
 >>> file_cache = FileCache(path='/tmp/pycrest_cache')
->>> eve = pycrest.EVE(cache=file_cache) 
+>>> eve = pycrest.EVE(cache=file_cache)
 
 .. highlight:: none
 
@@ -190,8 +190,8 @@ This will disable the cache for everything you will do using PyCrest. No call or
 .. highlight:: none
 
 **Disable caching on demand**
-You can disable the caching for a specific ``get()`` call you don't want to cache, by simply adding ``caching=False|None`` to the call parameters. 
-For example: 
+You can disable the caching for a specific ``get()`` call you don't want to cache, by simply adding ``caching=False|None`` to the call parameters.
+For example:
 
 .. highlight:: python
 
@@ -200,3 +200,36 @@ For example:
 >>> regions = crest_root.regions(caching=False)
 
 .. highlight:: none
+
+Signals
+-------
+Signals are "events" that will be triggered in some circumstances and they can have one or more functions attached as receivers of the event.
+These functions will be called automatically when the signal is fired.
+
+To subscribe to any of these signals, you just need to import it and add your receiver to it. In the same way, you also can remove an receiver from an signal whenever you want, in case you don't want the event to trigger your receiver again.
+
+.. highlight:: python
+
+>>> from pycrest.event import after_token_refresh
+>>> after_token_refresh.add_receiver(your_receiver_function)  # from now, your_receiver_function will be triggered with this signal
+
+>>> after_token_refresh.remove_receiver(your_receiver_function)  # once you do this, your_receiver_function will never be triggered, unless you add it again
+
+.. highlight:: none
+
+List of signals
+~~~~~~~~~~~~~~~
+after_token_refresh
+^^^^^^^^^^^^^^^^^^^
+This signal is triggered as soon as the authorizations are refreshed using the refresh_token.
+
+List of argument given to the receivers :
++---------------+--------+--------------------------------------+
+|   Arguments   |  Type  |            Description               |
++===============+========+======================================+
+| access_token  | String | The new access token used to log in  |
++---------------+--------+--------------------------------------+
+| refresh_token | String | The refresh token used to refresh    |
++---------------+--------+--------------------------------------+
+| expires       | int    | The timestamps when the token expires|
++---------------+--------+--------------------------------------+
