@@ -284,6 +284,16 @@ class EVE(APIConnection):
                                 self.api_key,
                                 cache=self.cache)
 
+    def tokenize(self, refresh_token):
+        auth = text_(base64.b64encode(bytes_("%s:%s" % (self.client_id, self.api_key))))
+        headers = {"Authorization": "Basic %s" % auth}
+        params = {"grant_type": "refresh_token", "refresh_token": refresh_token}
+        res = requests.post("%s/token" % self._oauth_endpoint, params=params, headers=headers)
+        if res.status_code != 200:
+            raise APIException("Got unexpected status code from API: %i" % res.status_code)
+        con = AuthedConnection(res.json(), self._authed_endpoint, self._oauth_endpoint, self.client_id, self.api_key)
+        return con.refresh()
+
 
 class AuthedConnection(EVE):
 
