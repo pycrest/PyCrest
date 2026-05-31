@@ -1,10 +1,8 @@
 # PyCrest
 
-[![Build Status](https://travis-ci.org/pycrest/PyCrest.svg?branch=master)](https://travis-ci.org/pycrest/PyCrest)
-[![Coverage Status](https://coveralls.io/repos/github/pycrest/PyCrest/badge.svg?branch=master)](https://coveralls.io/github/pycrest/PyCrest?branch=master)
+## Archived
 
-[![Gitter](https://badges.gitter.im/pycrest/PyCrest.svg)](https://gitter.im/pycrest/PyCrest?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
-
+This project has not been under development for quite a while and is now archived.
 
 ## Contributing
 
